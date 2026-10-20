@@ -296,7 +296,8 @@ def handle_delete(context: Any, args: list[str]) -> CommandResult:
         return CommandResult.fail()
 
     # Check protected path constraints
-    project_root = Path(__file__).parent.parent.resolve()
+    from core.paths import get_app_root
+    project_root = get_app_root().resolve()
     appdata_dir = context.config.base_dir.resolve()
     shortcuts = context.config.get_folder_shortcuts()
 

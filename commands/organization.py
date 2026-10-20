@@ -96,10 +96,12 @@ def is_protected_organize_folder(target: Path, context: Any) -> tuple[bool, str]
     if res == prog_x86:
         return True, "Cannot organize Program Files directory."
 
-    # 5. Project root
-    project_root = Path(__file__).resolve().parent.parent
+    # 5. Project/Install root
+    from core.paths import get_app_root, is_frozen
+    project_root = get_app_root().resolve()
     if res == project_root or project_root.is_relative_to(res):
-        return True, "Cannot organize the MayuriShell project folder or its parents."
+        folder_desc = "install folder" if is_frozen() else "project folder"
+        return True, f"Cannot organize the MayuriShell {folder_desc} or its parents."
 
     # 6. AppData configuration directory
     appdata_dir = context.config.base_dir.resolve()

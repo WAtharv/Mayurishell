@@ -12,6 +12,7 @@ from core.executor import CommandResult
 from core.mascots import VALID_MASCOTS, get_mascot, resolve_mascot_name
 from core.registry import ArgumentRules, CommandInfo, CommandRegistry
 from core.theme import THEMES, ThemeManager
+from core.version import VERSION
 from services.system_service import (
     format_bytes_gb,
     format_bytes_mb_or_gb,
@@ -95,7 +96,7 @@ def render_fetch(context: Any) -> None:
 
     username = context.config.get("username", "Mayuri")
     host = context.config.get_prompt_host()
-    ver = context.config.get("version", "0.1.0")
+    ver = context.config.get("version", VERSION)
     num_cmds = len(context.registry.list_commands())
     num_aliases = len(context.alias_manager.get_all()) if hasattr(context, "alias_manager") else 0
 

@@ -116,7 +116,9 @@ def is_protected_path(
 
     # 5. Project root and AppData directory
     if res_target == project_root.resolve() or project_root.resolve().is_relative_to(res_target):
-        return True, "Cannot delete MayuriShell project folder or its parents."
+        from core.paths import is_frozen
+        folder_desc = "install folder" if is_frozen() else "project folder"
+        return True, f"Cannot delete MayuriShell {folder_desc} or its parents."
     if res_target == appdata_dir.resolve() or appdata_dir.resolve().is_relative_to(res_target):
         return True, "Cannot delete MayuriShell configuration/appdata directory."
 

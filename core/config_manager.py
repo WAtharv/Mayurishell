@@ -11,11 +11,12 @@ from typing import Any
 
 from core.exceptions import ConfigError
 from core.logging_config import get_logger
+from core.version import VERSION
 
 logger = get_logger()
 
 DEFAULT_CONFIG: dict[str, Any] = {
-    "version": "0.1.0",
+    "version": VERSION,
     "username": "Mayuri",
     "prompt_theme": "default",
     "prompt_template": "{username}@{hostname} > ",

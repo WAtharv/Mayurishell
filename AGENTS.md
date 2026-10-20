@@ -72,3 +72,10 @@ Command handlers report execution outcomes uniformly by returning a `CommandResu
 - `CommandResult.cancel()`: The user aborted an interactive prompt or confirmation (e.g. answering 'N' to a prompt). The executor sets the mascot mood to `neutral` (neither happy nor worried), does not log a warning, and does not treat cancellation as an error.
 Handlers must use `CommandResult.fail()` / `CommandResult.cancel()` / `CommandResult.success()`.
 
+## Repo Hygiene
+- Never leave scratch scripts, test folders, exported files or logs inside the project folder. Use the system temp folder or an ignored `scratch/` folder, and delete them when finished.
+- Tests must only use `tmp_path`, never create folders in the project.
+- Before reporting a stage complete, run `git status` and list any untracked files that are not source, tests, docs or packaging files. Remove them or tell the user.
+- Never commit build output (`build/`, `dist/`), `config.json`, `history.json`, logs or exported reports.
+
+

@@ -20,7 +20,10 @@ htmlcov/
 dist/
 build/
 *.spec
+!packaging/*.spec
 *.egg-info/
+*.zip
+*.sha256
 
 # User data & logs (if accidentally created locally)
 logs/

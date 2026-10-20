@@ -241,6 +241,18 @@ class MayuriShell:
         logger.info("MayuriShell REPL session started.")
         self.display_welcome_banner()
 
+        # If stdin is redirected/piped, execute lines in non-interactive batch mode
+        import sys
+        if sys.stdin and not sys.stdin.isatty():
+            for line in sys.stdin:
+                line_str = line.strip()
+                if line_str:
+                    self.run_command_line(line_str)
+                if not self.context.running:
+                    break
+            logger.info("MayuriShell batch session ended.")
+            return
+
         while self.context.running:
             try:
                 user_input = self.session.prompt(self.get_prompt_text())

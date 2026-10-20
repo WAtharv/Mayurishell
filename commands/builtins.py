@@ -16,7 +16,7 @@ from services.file_service import format_bytes
 if TYPE_CHECKING:
     from core.shell import ShellContext
 
-VERSION = "0.1.0"
+from core.version import VERSION
 
 
 def get_real_desktop_path() -> Path:
