@@ -36,6 +36,7 @@ class ShellContext:
         alias_manager: AliasManager | None = None,
         console: Console | None = None,
         current_dir: Path | None = None,
+        theme_manager: Any | None = None,
     ) -> None:
         self.config = config
         self.registry = registry
@@ -43,7 +44,14 @@ class ShellContext:
         self.alias_manager = alias_manager if alias_manager is not None else AliasManager(config)
         self.console = console if console is not None else Console()
         self.current_dir = (current_dir if current_dir is not None else Path.cwd()).resolve()
+        from core.theme import ThemeManager
+        self.theme_manager: ThemeManager = theme_manager if theme_manager is not None else ThemeManager(config, console=self.console)
         self.running: bool = True
+
+    @property
+    def theme(self) -> Any:
+        """Return the current active Theme."""
+        return self.theme_manager.current
 
     def resolve_path(self, raw: str) -> tuple[Path, str | None]:
         """Resolve a raw path relative to current working directory and shortcuts."""
@@ -68,6 +76,7 @@ class MayuriShell:
         alias_manager: AliasManager | None = None,
         console: Console | None = None,
         current_dir: Path | None = None,
+        theme_manager: Any | None = None,
     ) -> None:
         self.console = console if console is not None else Console()
         self.alias_manager = alias_manager if alias_manager is not None else AliasManager(config)
@@ -78,6 +87,7 @@ class MayuriShell:
             alias_manager=self.alias_manager,
             console=self.console,
             current_dir=current_dir,
+            theme_manager=theme_manager,
         )
         self.executor = CommandExecutor(registry=registry, console=self.console)
         
@@ -103,25 +113,23 @@ class MayuriShell:
             )
 
     def display_welcome_banner(self) -> None:
-        """Display the welcoming startup banner."""
-        username = self.context.config.get("username", "Mayuri")
-        banner_content = (
-            "[bold pink1]╔══════════════════════════════════════════════╗[/bold pink1]\n"
-            "[bold pink1]║                 [/bold pink1][bold white]MAYURISHELL[/bold white][bold pink1]                  ║[/bold pink1]\n"
-            "[bold pink1]║          [/bold pink1][dim white]YOUR PC. YOUR COMMANDS.[/dim white][bold pink1]             ║[/bold pink1]\n"
-            "[bold pink1]╚══════════════════════════════════════════════╝[/bold pink1]\n\n"
-            f"[bold cyan]Welcome back, {username}![/bold cyan]\n"
-            "Type [bold yellow]'help'[/bold yellow] to explore your commands.\n"
-        )
-        self.console.print(banner_content)
+        """Display the welcoming startup banner and fetch dashboard."""
+        show_welcome = self.context.config.get("preferences", {}).get("show_welcome", True)
+        if not show_welcome:
+            return
+        from commands.appearance import render_banner, render_fetch
+        render_banner(self.context)
+        render_fetch(self.context)
 
     def get_prompt_text(self) -> HTML:
         """Construct the prompt string with prompt_toolkit HTML formatting."""
         username = self.context.config.get("username", "Mayuri").lower()
-        hostname = (platform.node() or "pc").lower()
-        
+        host = self.context.config.get_prompt_host()
+        prompt_symbol = self.context.config.get_prompt_symbol()
+        theme = self.context.theme
+
         show_cwd = self.context.config.get("preferences", {}).get("show_cwd_in_prompt", True)
-        cwd_segment = ""
+        short_path = ""
         if show_cwd:
             cur = self.context.current_dir
             home = Path.home().resolve()
@@ -133,9 +141,61 @@ class MayuriShell:
                     short_path = f"~/{rel.as_posix()}"
                 except ValueError:
                     short_path = cur.as_posix()
-            cwd_segment = f" <ansiyellow>{short_path}</ansiyellow>"
 
-        return HTML(f"<ansibrightmagenta>{username}@{hostname}</ansibrightmagenta>{cwd_segment} <ansicyan>&gt;</ansicyan> ")
+        escaped_symbol = "&gt;" if prompt_symbol == ">" else prompt_symbol.replace("&", "&amp;").replace("<", "&lt;")
+
+        # In plain mode: strictly ASCII with no formatting tags
+        if theme.is_plain:
+            cwd_str = f" {short_path}" if short_path else ""
+            return HTML(f"{username}@{host}{cwd_str} {escaped_symbol} ")
+
+        # Colored mode: style using theme tokens (no emoji in prompt)
+        def _clean_pt_color(color: str) -> str:
+            if not color:
+                return "default"
+            token = color.strip().split()[-1]
+            return token
+
+        primary_color = _clean_pt_color(theme.primary)
+        accent_color = _clean_pt_color(theme.accent)
+        muted_color = _clean_pt_color(theme.muted)
+
+        cwd_segment = f' <style color="{accent_color}">{short_path}</style>' if short_path else ""
+
+        return HTML(
+            f'<style color="{primary_color}">{username}</style>'
+            f'<style color="{muted_color}">@{host}</style>'
+            f'{cwd_segment} '
+            f'<style color="{primary_color}">{escaped_symbol}</style> '
+        )
+
+    def _show_reactive_mascot(self, cmd_name: str, success: bool) -> None:
+        """Display subtle reactive mascot face after command execution."""
+        import sys
+        if not sys.stdout.isatty():
+            return
+
+        mode = self.context.config.get_reactive_mascot_mode()
+        if mode == "off":
+            return
+        if mode == "errors" and success:
+            return
+
+        # Skip for specific non-content or self-rendering commands
+        if cmd_name.lower() in ("clear", "fetch", "pet", "mascot", "theme", "help"):
+            return
+
+        from core.mascots import get_reactive_face, resolve_mascot_name
+        mascot_name = self.context.config.get_mascot_name()
+        resolved = resolve_mascot_name(mascot_name)
+        theme = self.context.theme
+        mood = "happy" if success else "worried"
+        face = get_reactive_face(resolved, mood, is_plain=theme.is_plain)
+
+        if theme.is_plain:
+            self.console.print(f" {face}\n")
+        else:
+            self.console.print(f" [{theme.muted}]{face}[/{theme.muted}]\n")
 
     def run_command_line(self, line: str) -> bool:
         """Parse and execute a single command line.
@@ -155,10 +215,15 @@ class MayuriShell:
             if not parsed:
                 return True
         except ParseError as p_err:
-            self.console.print(f"[bold red]Syntax Error:[/bold red] {p_err}")
+            theme = self.context.theme
+            self.console.print(f"{theme.format_error('Syntax Error:')} {p_err}")
+            self._show_reactive_mascot("error", False)
             return False
 
-        return self.executor.execute(parsed, self.context)
+        success = self.executor.execute(parsed, self.context)
+        if self.context.running:
+            self._show_reactive_mascot(parsed.name, success)
+        return success
 
     def run(self) -> None:
         """Start and run the main interactive REPL loop."""
@@ -171,16 +236,27 @@ class MayuriShell:
                 self.run_command_line(user_input)
             except KeyboardInterrupt:
                 # Ctrl+C resets current prompt line without crashing or exiting
-                self.console.print("\n[dim]KeyboardInterrupt: Operation cancelled. (Ctrl+D to exit)[/dim]")
+                theme = self.context.theme
+                self.console.print(f"\n{theme.format_muted('KeyboardInterrupt: Operation cancelled. (Ctrl+D to exit)')}")
                 continue
             except EOFError:
-                # Ctrl+D exits gracefully
+                # Ctrl+D exits gracefully with sleepy mascot
                 username = self.context.config.get("username", "Mayuri")
-                self.console.print(f"\n[bold pink1]Goodbye, {username}! (,,•́ω•̀,,)ﾉ[/bold pink1]")
+                from core.mascots import get_reactive_face, resolve_mascot_name
+                mascot_name = self.context.config.get_mascot_name()
+                resolved = resolve_mascot_name(mascot_name)
+                theme = self.context.theme
+                face = get_reactive_face(resolved, "sleepy", is_plain=theme.is_plain)
+
+                if theme.is_plain:
+                    self.console.print(f"\nGoodbye, {username}! {face}")
+                else:
+                    self.console.print(f"\n{theme.format_primary(f'Goodbye, {username}!')} {theme.format_muted(face)}")
                 self.context.running = False
                 break
             except Exception as unhandled:
                 logger.critical("Unexpected error in shell loop: %s", unhandled, exc_info=True)
-                self.console.print(f"[bold red]Unexpected shell error:[/bold red] {unhandled}")
+                theme = self.context.theme
+                self.console.print(f"{theme.format_error('Unexpected shell error:')} {unhandled}")
 
         logger.info("MayuriShell REPL session ended.")

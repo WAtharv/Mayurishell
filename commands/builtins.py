@@ -5,7 +5,7 @@ import platform
 import sys
 from typing import TYPE_CHECKING, Any
 
-from rich.panel import Panel
+from rich.markup import escape
 from rich.table import Table
 
 from core.registry import ArgumentRules, CommandInfo, CommandRegistry
@@ -20,53 +20,53 @@ def handle_help(context: Any, args: list[str]) -> None:
     """Show available commands or detailed info for a specific command."""
     registry: CommandRegistry = context.registry
     console = context.console
+    theme = context.theme
 
     if args:
         target = args[0].lower()
         cmd = registry.get(target)
         if not cmd:
             suggestions = registry.suggest(target)
-            console.print(f"[bold red]Command not found:[/bold red] '{target}'")
+            console.print(f"{theme.format_error('Command not found:')} '{escape(target)}'")
             if suggestions:
-                sugg_str = ", ".join(f"[bold cyan]{s}[/bold cyan]" for s in suggestions)
+                sugg_str = ", ".join(theme.format_primary(s, bold=True) for s in suggestions)
                 console.print(f"  Did you mean: {sugg_str}?")
             return
 
         grid = Table.grid(padding=(0, 2))
-        grid.add_column(style="bold magenta", justify="right")
-        grid.add_column()
-        grid.add_row("Command:", f"[bold cyan]{cmd.name}[/bold cyan]")
-        grid.add_row("Category:", f"[green]{cmd.category}[/green]")
-        grid.add_row("Usage:", f"[yellow]{cmd.usage}[/yellow]")
-        grid.add_row("Description:", cmd.description)
+        grid.add_column(style=theme.bold_accent_style, justify="right")
+        grid.add_column(overflow="fold")
+        grid.add_row("Command:", theme.format_primary(cmd.name, bold=True))
+        grid.add_row("Category:", theme.format_success(cmd.category))
+        grid.add_row("Usage:", theme.format_warning(cmd.usage))
+        grid.add_row("Description:", escape(cmd.description))
 
         console.print(
-            Panel(
+            theme.create_panel(
                 grid,
-                title=f"[bold pink1]MayuriShell - Command Info: {cmd.name}[/bold pink1]",
-                border_style="magenta",
+                title=f"MayuriShell - Command Info: {escape(cmd.name)}",
             )
         )
         return
 
     # List all commands grouped by category
-    table = Table(
-        title="[bold magenta]Available Commands[/bold magenta]",
-        border_style="purple",
-        header_style="bold cyan",
+    table = theme.create_table(
+        title="Available Commands",
         show_lines=False,
     )
-    table.add_column("Category", style="green", no_wrap=True)
-    table.add_column("Command", style="bold cyan", no_wrap=True)
-    table.add_column("Usage", style="yellow")
-    table.add_column("Description", style="white")
+    table.add_column("Category", style=theme.success_style, no_wrap=True)
+    table.add_column("Command", style=theme.bold_primary_style, no_wrap=True)
+    table.add_column("Usage", style=theme.warning_style)
+    table.add_column("Description", style=theme.text_style)
 
     for cat in registry.get_categories():
         for cmd in registry.list_commands(category=cat):
             table.add_row(cat, cmd.name, cmd.usage, cmd.description)
 
     console.print(table)
-    console.print("[dim]Type [bold cyan]help <command>[/bold cyan] for details on a specific command.[/dim]\n")
+    console.print(
+        f"{theme.format_muted('Type ')}{theme.format_primary('help <command>', bold=True)}{theme.format_muted(' for details on a specific command.')}\n"
+    )
 
 
 def handle_clear(context: Any, args: list[str]) -> None:
@@ -76,60 +76,69 @@ def handle_clear(context: Any, args: list[str]) -> None:
 
 def handle_exit(context: Any, args: list[str]) -> None:
     """Exit MayuriShell gracefully."""
-    username = context.config.get("username", "Mayuri")
-    context.console.print(f"\n[bold pink1]Goodbye, {username}! (,,•́ω•̀,,)ﾉ See you next time![/bold pink1]")
+    theme = context.theme
+    username = escape(context.config.get("username", "Mayuri"))
+    if theme.is_plain:
+        context.console.print(f"\nGoodbye, {username}! (^_^)/ See you next time!")
+    else:
+        context.console.print(f"\n{theme.format_primary(f'Goodbye, {username}! (,,•́ω•̀,,)ﾉ See you next time!', bold=True)}")
     context.running = False
 
 
 def handle_history(context: Any, args: list[str]) -> None:
     """Show command history or clear history."""
     console = context.console
+    theme = context.theme
     history_mgr = context.history_manager
 
     if args:
         subcmd = args[0].lower()
         if subcmd == "clear":
             history_mgr.clear()
-            console.print("[green]Command history cleared successfully.[/green]")
+            console.print(theme.format_success("Command history cleared successfully."))
             return
         else:
-            console.print(f"[bold red]Unknown history subcommand:[/bold red] '{subcmd}'. Usage: [yellow]history [clear][/yellow]")
+            console.print(
+                f"{theme.format_error('Unknown history subcommand:')} '{escape(subcmd)}'. "
+                f"Usage: {theme.format_warning('history [clear]')}"
+            )
             return
 
     entries = history_mgr.get_all()
     if not entries:
-        console.print("[dim]No command history recorded yet.[/dim]")
+        console.print(theme.format_muted("No command history recorded yet."))
         return
 
     # Display last 50 entries
     display_entries = entries[-50:]
-    table = Table(
-        title="[bold magenta]Command History (Recent)[/bold magenta]",
-        border_style="purple",
-        header_style="bold cyan",
+    table = theme.create_table(
+        title="Command History (Recent)",
     )
-    table.add_column("#", style="dim", justify="right", no_wrap=True)
-    table.add_column("Timestamp", style="dim cyan", no_wrap=True)
-    table.add_column("Command", style="bold white")
+    table.add_column("#", style=theme.muted_style, justify="right", no_wrap=True)
+    table.add_column("Timestamp", style=theme.muted_style, no_wrap=True)
+    table.add_column("Command", style=theme.bold_text_style)
 
     start_idx = len(entries) - len(display_entries) + 1
     for i, entry in enumerate(display_entries, start=start_idx):
-        table.add_row(str(i), entry.get("timestamp", "-"), entry.get("command", ""))
+        table.add_row(str(i), escape(entry.get("timestamp", "-")), escape(entry.get("command", "")))
 
     console.print(table)
-    console.print("[dim]Tip: Use [bold cyan]history clear[/bold cyan] to wipe history.[/dim]\n")
+    console.print(
+        f"{theme.format_muted('Tip: Use ')}{theme.format_primary('history clear', bold=True)}{theme.format_muted(' to wipe history.')}\n"
+    )
 
 
 def handle_version(context: Any, args: list[str]) -> None:
     """Display MayuriShell version and environment details."""
     console = context.console
+    theme = context.theme
     content = (
-        f"[bold pink1]MayuriShell[/bold pink1] version [bold cyan]{VERSION}[/bold cyan]\n"
-        f"Python: [yellow]{sys.version.split()[0]}[/yellow]\n"
-        f"Platform: [green]{platform.system()} {platform.release()} ({platform.machine()})[/green]\n"
-        f"Architecture: [dim]{platform.architecture()[0]}[/dim]"
+        f"{theme.format_primary('MayuriShell', bold=True)} version {theme.format_primary(VERSION, bold=True)}\n"
+        f"Python: {theme.format_warning(sys.version.split()[0])}\n"
+        f"Platform: {theme.format_success(f'{platform.system()} {platform.release()} ({platform.machine()})')}\n"
+        f"Architecture: {theme.format_muted(platform.architecture()[0])}"
     )
-    console.print(Panel(content, title="[bold magenta]Version Info[/bold magenta]", border_style="magenta"))
+    console.print(theme.create_panel(content, title="Version Info"))
 
 
 def register_builtin_commands(registry: CommandRegistry) -> None:

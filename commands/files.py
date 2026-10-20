@@ -6,7 +6,7 @@ from pathlib import Path
 import sys
 from typing import Any
 
-from rich.panel import Panel
+from rich.markup import escape
 from rich.table import Table
 
 from core.registry import ArgumentRules, CommandInfo, CommandRegistry
@@ -24,10 +24,11 @@ from services.file_service import (
 )
 
 
-def confirm_prompt(console: Any, prompt_msg: str, default_yes: bool = False) -> bool:
+def confirm_prompt(console: Any, prompt_msg: str, default_yes: bool = False, theme: Any = None) -> bool:
     """Ask user for yes/no confirmation. Default answer is No (y/N)."""
     tag = "(Y/n)" if default_yes else "(y/N)"
-    console.print(f"{prompt_msg} [bold cyan]{tag}[/bold cyan] ", end="")
+    tag_str = theme.format_primary(tag, bold=True) if theme else tag
+    console.print(f"{prompt_msg} {tag_str} ", end="")
     if not sys.stdin.isatty():
         console.print()
         return default_yes
@@ -43,28 +44,37 @@ def confirm_prompt(console: Any, prompt_msg: str, default_yes: bool = False) -> 
 def handle_open(context: Any, args: list[str]) -> None:
     """Open a file with its default application."""
     console = context.console
+    theme = context.theme
     raw_path = args[0]
     target, _ = context.resolve_path(raw_path)
 
     if not target.exists():
-        console.print(f"[bold red]File not found:[/bold red] '{target}'")
+        console.print(f"{theme.format_error('File not found:')} '{escape(str(target))}'")
         return
 
     if target.is_dir():
-        console.print(f"[bold yellow]Path is a directory.[/bold yellow] Use [bold cyan]cd '{target.name}'[/bold cyan] to navigate or its folder shortcut to open in Explorer.")
+        cd_cmd = theme.format_primary(f"cd '{target.name}'", bold=True)
+        console.print(
+            f"{theme.format_warning('Path is a directory.', bold=True)} "
+            f"Use {cd_cmd} to navigate or its folder shortcut to open in Explorer."
+        )
         return
 
     # Check for executable or script extensions
     ext = target.suffix.lower()
     if ext in EXECUTABLE_EXTENSIONS:
-        console.print(f"[bold yellow]Security Warning:[/bold yellow] '{target.name}' is an executable or script ({ext}).")
+        console.print(
+            f"{theme.format_warning('Security Warning:', bold=True)} "
+            f"'{escape(target.name)}' is an executable or script ({escape(ext)})."
+        )
         confirmed = confirm_prompt(
             console,
             "Do you want to run it?",
             default_yes=False,
+            theme=theme,
         )
         if not confirmed:
-            console.print("[dim]Execution cancelled by user.[/dim]")
+            console.print(theme.format_muted("Execution cancelled by user."))
             return
 
     try:
@@ -73,50 +83,53 @@ def handle_open(context: Any, args: list[str]) -> None:
         else:
             import webbrowser
             webbrowser.open(target.as_uri())
-        console.print(f"[green]Opened[/green] [bold cyan]{target.name}[/bold cyan]")
+        console.print(f"{theme.format_success('Opened')} {theme.format_primary(escape(target.name), bold=True)}")
     except Exception as exc:
-        console.print(f"[bold red]Failed to open file:[/bold red] {exc}")
+        console.print(f"{theme.format_error('Failed to open file:')} {escape(str(exc))}")
 
 
 def handle_mkdir(context: Any, args: list[str]) -> None:
     """Create a new directory."""
     console = context.console
+    theme = context.theme
     target, _ = context.resolve_path(args[0])
 
     try:
         create_directory(target)
-        console.print(f"[green]Created directory:[/green] [bold cyan]{target}[/bold cyan]")
+        console.print(f"{theme.format_success('Created directory:')} {theme.format_primary(escape(str(target)), bold=True)}")
     except Exception as exc:
-        console.print(f"[bold red]Error creating directory:[/bold red] {exc}")
+        console.print(f"{theme.format_error('Error creating directory:')} {escape(str(exc))}")
 
 
 def handle_touch(context: Any, args: list[str]) -> None:
     """Create an empty file or update its timestamp."""
     console = context.console
+    theme = context.theme
     target, _ = context.resolve_path(args[0])
 
     try:
         create_file(target)
-        console.print(f"[green]Created/updated file:[/green] [bold cyan]{target}[/bold cyan]")
+        console.print(f"{theme.format_success('Created/updated file:')} {theme.format_primary(escape(str(target)), bold=True)}")
     except Exception as exc:
-        console.print(f"[bold red]Error touching file:[/bold red] {exc}")
+        console.print(f"{theme.format_error('Error touching file:')} {escape(str(exc))}")
 
 
 def handle_copy(context: Any, args: list[str]) -> None:
     """Copy a file or directory."""
     console = context.console
+    theme = context.theme
     auto_yes = "-y" in args or "--yes" in args
     clean_args = [a for a in args if a not in ("-y", "--yes")]
 
     if len(clean_args) < 2:
-        console.print("[bold red]Usage:[/bold red] copy <source> <destination>")
+        console.print(f"{theme.format_error('Usage:')} copy <source> <destination>")
         return
 
     src, _ = context.resolve_path(clean_args[0])
     dst, _ = context.resolve_path(clean_args[1])
 
     if not src.exists():
-        console.print(f"[bold red]Source not found:[/bold red] '{src}'")
+        console.print(f"{theme.format_error('Source not found:')} '{escape(str(src))}'")
         return
 
     # Check overwrite if dst exists
@@ -126,36 +139,41 @@ def handle_copy(context: Any, args: list[str]) -> None:
         if not auto_yes:
             confirmed = confirm_prompt(
                 console,
-                f"Target '{check_target.name}' already exists. Overwrite?",
+                f"Target '{escape(check_target.name)}' already exists. Overwrite?",
                 default_yes=False,
+                theme=theme,
             )
             if not confirmed:
-                console.print("[dim]Copy cancelled.[/dim]")
+                console.print(theme.format_muted("Copy cancelled."))
                 return
         overwrite = True
 
     try:
         result = copy_path(src, dst, overwrite=overwrite)
-        console.print(f"[green]Copied[/green] [bold cyan]{src.name}[/bold cyan] -> [bold cyan]{result}[/bold cyan]")
+        console.print(
+            f"{theme.format_success('Copied')} {theme.format_primary(escape(src.name), bold=True)} -> "
+            f"{theme.format_primary(escape(str(result)), bold=True)}"
+        )
     except Exception as exc:
-        console.print(f"[bold red]Copy failed:[/bold red] {exc}")
+        console.print(f"{theme.format_error('Copy failed:')} {escape(str(exc))}")
 
 
 def handle_move(context: Any, args: list[str]) -> None:
     """Move a file or directory."""
     console = context.console
+    theme = context.theme
     auto_yes = "-y" in args or "--yes" in args
     clean_args = [a for a in args if a not in ("-y", "--yes")]
 
     if len(clean_args) < 2:
-        console.print("[bold red]Usage:[/bold red] move <source> <destination>")
+        console.print(f"{theme.format_error('Usage:')} move <source> <destination>")
         return
 
     src, _ = context.resolve_path(clean_args[0])
     dst, _ = context.resolve_path(clean_args[1])
 
     if not src.exists():
-        console.print(f"[bold red]Source not found:[/bold red] '{src}'")
+        console.print(f"{theme.format_error('Source not found:')} '{escape(str(src))}'")
         return
 
     check_target = dst / src.name if dst.is_dir() else dst
@@ -164,29 +182,34 @@ def handle_move(context: Any, args: list[str]) -> None:
         if not auto_yes:
             confirmed = confirm_prompt(
                 console,
-                f"Target '{check_target.name}' already exists. Overwrite?",
+                f"Target '{escape(check_target.name)}' already exists. Overwrite?",
                 default_yes=False,
+                theme=theme,
             )
             if not confirmed:
-                console.print("[dim]Move cancelled.[/dim]")
+                console.print(theme.format_muted("Move cancelled."))
                 return
         overwrite = True
 
     try:
         result = move_path(src, dst, overwrite=overwrite)
-        console.print(f"[green]Moved[/green] [bold cyan]{src.name}[/bold cyan] -> [bold cyan]{result}[/bold cyan]")
+        console.print(
+            f"{theme.format_success('Moved')} {theme.format_primary(escape(src.name), bold=True)} -> "
+            f"{theme.format_primary(escape(str(result)), bold=True)}"
+        )
     except Exception as exc:
-        console.print(f"[bold red]Move failed:[/bold red] {exc}")
+        console.print(f"{theme.format_error('Move failed:')} {escape(str(exc))}")
 
 
 def handle_rename(context: Any, args: list[str]) -> None:
     """Rename a file or folder in place."""
     console = context.console
+    theme = context.theme
     auto_yes = "-y" in args or "--yes" in args
     clean_args = [a for a in args if a not in ("-y", "--yes")]
 
     if len(clean_args) < 2:
-        console.print("[bold red]Usage:[/bold red] rename <target> <new_name>")
+        console.print(f"{theme.format_error('Usage:')} rename <target> <new_name>")
         return
 
     src, _ = context.resolve_path(clean_args[0])
@@ -194,11 +217,14 @@ def handle_rename(context: Any, args: list[str]) -> None:
 
     # Rejection of path separators
     if "/" in new_name or "\\" in new_name:
-        console.print("[bold red]Error:[/bold red] New name must be a plain filename with no path separators. Use 'move' to relocate items.")
+        console.print(
+            f"{theme.format_error('Error:')} New name must be a plain filename with no path separators. "
+            f"Use 'move' to relocate items."
+        )
         return
 
     if not src.exists():
-        console.print(f"[bold red]Target not found:[/bold red] '{src}'")
+        console.print(f"{theme.format_error('Target not found:')} '{escape(str(src))}'")
         return
 
     target_dst = src.parent / new_name
@@ -207,19 +233,23 @@ def handle_rename(context: Any, args: list[str]) -> None:
         if not auto_yes:
             confirmed = confirm_prompt(
                 console,
-                f"Target '{new_name}' already exists. Overwrite?",
+                f"Target '{escape(new_name)}' already exists. Overwrite?",
                 default_yes=False,
+                theme=theme,
             )
             if not confirmed:
-                console.print("[dim]Rename cancelled.[/dim]")
+                console.print(theme.format_muted("Rename cancelled."))
                 return
         overwrite = True
 
     try:
         result = rename_path(src, new_name, overwrite=overwrite)
-        console.print(f"[green]Renamed[/green] [bold cyan]{src.name}[/bold cyan] -> [bold cyan]{result.name}[/bold cyan]")
+        console.print(
+            f"{theme.format_success('Renamed')} {theme.format_primary(escape(src.name), bold=True)} -> "
+            f"{theme.format_primary(escape(result.name), bold=True)}"
+        )
     except Exception as exc:
-        console.print(f"[bold red]Rename failed:[/bold red] {exc}")
+        console.print(f"{theme.format_error('Rename failed:')} {escape(str(exc))}")
 
 
 def handle_delete(context: Any, args: list[str]) -> None:
@@ -228,27 +258,28 @@ def handle_delete(context: Any, args: list[str]) -> None:
     Refuses protected paths. Requires -r for directories. Default confirmation is No.
     """
     console = context.console
+    theme = context.theme
     recursive = "-r" in args or "--recursive" in args
     auto_yes = "-y" in args or "--yes" in args
     targets = [a for a in args if a not in ("-r", "--recursive", "-y", "--yes")]
 
     if not targets:
-        console.print("[bold red]Usage:[/bold red] delete [-r] <target>")
+        console.print(f"{theme.format_error('Usage:')} delete [-r] <target>")
         return
 
     # Check for wildcards
     if len(targets) > 1:
-        console.print("[bold red]Error:[/bold red] Delete accepts only one explicit target at a time. No bulk/multiple deletion.")
+        console.print(f"{theme.format_error('Error:')} Delete accepts only one explicit target at a time. No bulk/multiple deletion.")
         return
 
     raw_target = targets[0]
     if any(ch in raw_target for ch in ("*", "?")):
-        console.print("[bold red]Error:[/bold red] Wildcards are not allowed in delete. Specify an exact file or folder.")
+        console.print(f"{theme.format_error('Error:')} Wildcards are not allowed in delete. Specify an exact file or folder.")
         return
 
     target_path, _ = context.resolve_path(raw_target)
     if not target_path.exists():
-        console.print(f"[bold red]Target not found:[/bold red] '{target_path}'")
+        console.print(f"{theme.format_error('Target not found:')} '{escape(str(target_path))}'")
         return
 
     # Check protected path constraints
@@ -264,61 +295,68 @@ def handle_delete(context: Any, args: list[str]) -> None:
         folder_shortcuts=shortcuts,
     )
     if is_prot:
-        console.print(f"[bold red]Deletion refused:[/bold red] {reason}")
+        console.print(f"{theme.format_error('Deletion refused:')} {escape(reason)}")
         return
 
     # Directory requires -r
     if target_path.is_dir() and not recursive:
-        console.print(f"[bold red]Error:[/bold red] '{target_path.name}' is a directory. Use [bold cyan]delete -r <directory>[/bold cyan] to delete.")
+        console.print(
+            f"{theme.format_error('Error:')} '{escape(target_path.name)}' is a directory. "
+            f"Use {theme.format_primary('delete -r <directory>', bold=True)} to delete."
+        )
         return
 
     # Check network / removable drive warning
     if is_network_or_removable(target_path):
-        console.print("[bold yellow]Warning:[/bold yellow] Target is on a network or removable drive. Windows may permanently delete it instead of using the Recycle Bin.")
+        console.print(
+            f"{theme.format_warning('Warning:', bold=True)} Target is on a network or removable drive. "
+            f"Windows may permanently delete it instead of using the Recycle Bin."
+        )
 
     # Confirmation prompt (default is No)
     if not auto_yes:
         if target_path.is_dir():
-            msg = f"[bold red]Are you sure you want to recursively delete directory '{target_path.name}' and all its contents?[/bold red]"
+            msg = theme.format_error(f"Are you sure you want to recursively delete directory '{escape(target_path.name)}' and all its contents?", bold=True)
         else:
-            msg = f"Are you sure you want to delete '{target_path.name}'?"
+            msg = f"Are you sure you want to delete '{escape(target_path.name)}'?"
 
-        confirmed = confirm_prompt(console, msg, default_yes=False)
+        confirmed = confirm_prompt(console, msg, default_yes=False, theme=theme)
         if not confirmed:
-            console.print("[dim]Deletion cancelled.[/dim]")
+            console.print(theme.format_muted("Deletion cancelled."))
             return
 
     try:
         recycle_path(target_path, recursive=recursive)
-        console.print(f"[green]Sent to Recycle Bin:[/green] [bold cyan]{target_path.name}[/bold cyan]")
+        console.print(f"{theme.format_success('Sent to Recycle Bin:')} {theme.format_primary(escape(target_path.name), bold=True)}")
     except Exception as exc:
-        console.print(f"[bold red]Delete failed:[/bold red] {exc}")
+        console.print(f"{theme.format_error('Delete failed:')} {escape(str(exc))}")
 
 
 def handle_info(context: Any, args: list[str]) -> None:
     """Display comprehensive information about a file or directory."""
     console = context.console
+    theme = context.theme
     raw_path = args[0]
     target, _ = context.resolve_path(raw_path)
 
     try:
         data = get_path_info(target)
     except Exception as exc:
-        console.print(f"[bold red]Error:[/bold red] {exc}")
+        console.print(f"{theme.format_error('Error:')} {escape(str(exc))}")
         return
 
     grid = Table.grid(padding=(0, 2))
-    grid.add_column(style="bold magenta", justify="right")
-    grid.add_column()
+    grid.add_column(style=theme.bold_accent_style, justify="right")
+    grid.add_column(overflow="fold")
 
-    grid.add_row("Name:", f"[bold cyan]{data['name']}[/bold cyan]")
-    grid.add_row("Type:", f"[green]{data['type']}[/green]")
-    grid.add_row("Full Path:", str(data["path"]))
-    grid.add_row("Size / Items:", str(data["size_formatted"]))
-    grid.add_row("Created:", str(data["created"]))
-    grid.add_row("Modified:", str(data["modified"]))
+    grid.add_row("Name:", theme.format_primary(escape(str(data['name'])), bold=True))
+    grid.add_row("Type:", theme.format_success(escape(str(data['type']))))
+    grid.add_row("Full Path:", escape(str(data["path"])))
+    grid.add_row("Size / Items:", escape(str(data["size_formatted"])))
+    grid.add_row("Created:", escape(str(data["created"])))
+    grid.add_row("Modified:", escape(str(data["modified"])))
 
-    console.print(Panel(grid, title=f"[bold pink1]Item Info: {data['name']}[/bold pink1]", border_style="magenta"))
+    console.print(theme.create_panel(grid, title=f"Item Info: {escape(str(data['name']))}"))
 
 
 def register_file_commands(registry: CommandRegistry) -> None:

@@ -19,6 +19,11 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "username": "Mayuri",
     "prompt_theme": "default",
     "prompt_template": "{username}@{hostname} > ",
+    "display": {
+        "theme": "kawaii",
+        "mascot": "cat",
+        "force_plain": False,
+    },
     "applications": {
         "notepad": "notepad.exe",
         "calculator": "calc.exe",
@@ -51,6 +56,9 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "confirm_destructive": True,
         "show_welcome": True,
         "show_cwd_in_prompt": True,
+        "reactive_mascot": "all",
+        "prompt_symbol": ">",
+        "prompt_host": "pc",
     },
 }
 
@@ -168,12 +176,30 @@ class ConfigManager:
         logger.debug("Configuration saved to %s", self.config_path)
 
     def get(self, key: str, default: Any = None) -> Any:
-        """Get a configuration value by top-level key."""
+        """Get a configuration value, supporting dotted keys e.g. 'display.theme'."""
+        if "." in key:
+            parts = key.split(".")
+            curr = self.data
+            for p in parts:
+                if isinstance(curr, dict) and p in curr:
+                    curr = curr[p]
+                else:
+                    return default
+            return curr
         return self.data.get(key, default)
 
     def set(self, key: str, value: Any, auto_save: bool = True) -> None:
-        """Set a configuration value and optionally persist immediately."""
-        self.data[key] = value
+        """Set a configuration value, supporting dotted keys e.g. 'display.force_plain'."""
+        if "." in key:
+            parts = key.split(".")
+            curr = self.data
+            for p in parts[:-1]:
+                if p not in curr or not isinstance(curr[p], dict):
+                    curr[p] = {}
+                curr = curr[p]
+            curr[parts[-1]] = value
+        else:
+            self.data[key] = value
         if auto_save:
             self.save()
 
@@ -215,3 +241,70 @@ class ConfigManager:
         """Expand ~ and Windows environment variables in paths."""
         expanded = os.path.expandvars(str(raw_path))
         return Path(os.path.expanduser(expanded)).resolve()
+
+    def get_theme_name(self) -> str:
+        """Get the configured theme name with validation and fallback."""
+        val = self.data.get("display", {}).get("theme", "kawaii")
+        if not isinstance(val, str):
+            logger.warning("Invalid theme type in config: %s. Falling back to 'kawaii'.", type(val))
+            return "kawaii"
+        clean = val.strip().lower()
+        valid = {"kawaii", "catppuccin", "tokyo-night", "rose-pine", "gruvbox", "plain"}
+        if clean not in valid:
+            logger.warning("Unknown theme '%s' in config. Falling back to 'kawaii'.", val)
+            return "kawaii"
+        return clean
+
+    def set_theme_name(self, name: str) -> None:
+        """Set and persist active theme name."""
+        if "display" not in self.data or not isinstance(self.data["display"], dict):
+            self.data["display"] = {}
+        self.data["display"]["theme"] = name.strip().lower()
+        self.save()
+
+    def get_mascot_name(self) -> str:
+        """Get the configured mascot name with validation and fallback."""
+        val = self.data.get("display", {}).get("mascot", "cat")
+        if not isinstance(val, str):
+            logger.warning("Invalid mascot type in config: %s. Falling back to 'cat'.", type(val))
+            return "cat"
+        clean = val.strip().lower()
+        valid = {"cat", "bunny", "bear", "fox", "penguin", "shiba", "random"}
+        if clean not in valid:
+            logger.warning("Unknown mascot '%s' in config. Falling back to 'cat'.", val)
+            return "cat"
+        return clean
+
+    def set_mascot_name(self, name: str) -> None:
+        """Set and persist active mascot name."""
+        if "display" not in self.data or not isinstance(self.data["display"], dict):
+            self.data["display"] = {}
+        self.data["display"]["mascot"] = name.strip().lower()
+        self.save()
+
+    def is_force_plain(self) -> bool:
+        """Return True if display.force_plain is enabled."""
+        return bool(self.data.get("display", {}).get("force_plain", False))
+
+    def get_reactive_mascot_mode(self) -> str:
+        """Get reactive mascot setting: 'all', 'errors', or 'off'."""
+        val = self.data.get("preferences", {}).get("reactive_mascot", "all")
+        if isinstance(val, bool):
+            return "all" if val else "off"
+        if not isinstance(val, str):
+            return "all"
+        clean = val.strip().lower()
+        if clean not in ("all", "errors", "off"):
+            logger.warning("Invalid reactive_mascot mode '%s'. Falling back to 'all'.", val)
+            return "all"
+        return clean
+
+    def get_prompt_symbol(self) -> str:
+        """Get the prompt symbol string (default '>')."""
+        val = self.data.get("preferences", {}).get("prompt_symbol", ">")
+        return str(val) if val else ">"
+
+    def get_prompt_host(self) -> str:
+        """Get the prompt host name (default 'pc')."""
+        val = self.data.get("preferences", {}).get("prompt_host", "pc")
+        return str(val) if val else "pc"

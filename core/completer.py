@@ -95,6 +95,10 @@ class MayuriCompleter(Completer):
             yield from self._complete_alias_names(current_token)
         elif cmd == "history":
             yield from self._complete_history_subcommands(current_token)
+        elif cmd == "theme":
+            yield from self._complete_theme_options(current_token)
+        elif cmd == "mascot":
+            yield from self._complete_mascot_options(current_token)
         elif cmd == "process":
             yield from self._complete_process_command(tokens, current_token)
         elif cmd == "processes":
@@ -237,6 +241,38 @@ class MayuriCompleter(Completer):
                 display="clear",
                 display_meta="Clear command history",
             )
+
+    def _complete_theme_options(self, current_token: str) -> Iterable[Completion]:
+        """Suggest theme names and 'preview' subcommand."""
+        from core.theme import THEMES
+        prefix = current_token.lower()
+        options = [("preview", "Preview all visual palettes side-by-side")]
+        for key, thm in THEMES.items():
+            options.append((key, thm.display_name))
+        for name, desc in options:
+            if name.lower().startswith(prefix):
+                yield Completion(
+                    name,
+                    start_position=-len(current_token),
+                    display=name,
+                    display_meta=desc,
+                )
+
+    def _complete_mascot_options(self, current_token: str) -> Iterable[Completion]:
+        """Suggest mascot names and 'random'."""
+        from core.mascots import VALID_MASCOTS
+        prefix = current_token.lower()
+        options = [("random", "Random companion each startup")]
+        for m in sorted(VALID_MASCOTS):
+            options.append((m, f"{m.capitalize()} companion"))
+        for name, desc in options:
+            if name.lower().startswith(prefix):
+                yield Completion(
+                    name,
+                    start_position=-len(current_token),
+                    display=name,
+                    display_meta=desc,
+                )
 
     def _complete_process_command(self, tokens: list[str], current_token: str) -> Iterable[Completion]:
         """Suggest process subcommands: find, info, kill, list."""

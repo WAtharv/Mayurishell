@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import sys
 
+from commands.appearance import register_appearance_commands
 from commands.applications import register_application_commands
 from commands.builtins import register_builtin_commands
 from commands.customization import register_customization_commands
@@ -36,6 +37,7 @@ def main() -> int:
         # Initialize command registry and register commands
         registry = CommandRegistry()
         register_builtin_commands(registry)
+        register_appearance_commands(registry)
         register_application_commands(registry, config_mgr)
         register_website_commands(registry, config_mgr)
         register_navigation_commands(registry, config_mgr)

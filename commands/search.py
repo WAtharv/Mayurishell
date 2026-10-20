@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-from rich.table import Table
+from rich.markup import escape
 
 from core.registry import ArgumentRules, CommandInfo, CommandRegistry
 from services.file_service import format_bytes, search_files
@@ -14,10 +14,11 @@ from services.file_service import format_bytes, search_files
 def handle_find(context: Any, args: list[str]) -> None:
     """Search for files in configured search directories."""
     console = context.console
+    theme = context.theme
     config = context.config
 
     if not args:
-        console.print("[bold red]Usage:[/bold red] find <pattern_or_name> [--ext <extension>] [--limit <number>]")
+        console.print(f"{theme.format_error('Usage:')} find <pattern_or_name> [--ext <extension>] [--limit <number>]")
         return
 
     # Parse arguments
@@ -43,7 +44,7 @@ def handle_find(context: Any, args: list[str]) -> None:
 
     query = " ".join(query_parts).strip()
     if not query and not extension:
-        console.print("[bold red]Error:[/bold red] Please provide a search query or an extension.")
+        console.print(f"{theme.format_error('Error:')} Please provide a search query or an extension.")
         return
 
     # Gather search roots from config
@@ -57,7 +58,11 @@ def handle_find(context: Any, args: list[str]) -> None:
     raw_excluded = config.get("excluded_directories", [".git", "node_modules", ".venv", "__pycache__", "AppData"])
     excluded_set = set(raw_excluded)
 
-    console.print(f"[dim]Searching for '{query or f'*.{extension}'}' in {len(search_roots)} configured directories... (Ctrl+C to cancel)[/dim]")
+    console.print(
+        theme.format_muted(
+            f"Searching for '{escape(query or f'*.{extension}')}' in {len(search_roots)} configured directories... (Ctrl+C to cancel)"
+        )
+    )
 
     try:
         matches, skipped_count, hit_limit = search_files(
@@ -68,39 +73,42 @@ def handle_find(context: Any, args: list[str]) -> None:
             limit=limit,
         )
     except KeyboardInterrupt:
-        console.print("\n[yellow]Search cancelled by user.[/yellow]")
+        console.print(f"\n{theme.format_warning('Search cancelled by user.')}")
         return
 
     if not matches:
-        console.print(f"[dim]No matching files found for '{query}'.[/dim]")
+        console.print(theme.format_muted(f"No matching files found for '{escape(query)}'."))
         if skipped_count > 0:
-            console.print(f"[dim]{skipped_count} folder(s) skipped due to permission restrictions.[/dim]")
+            console.print(theme.format_muted(f"{skipped_count} folder(s) skipped due to permission restrictions."))
         return
 
-    table = Table(
-        title=f"[bold magenta]Search Results ({len(matches)} matches)[/bold magenta]",
-        border_style="purple",
-        header_style="bold cyan",
+    table = theme.create_table(
+        title=f"Search Results ({len(matches)} matches)",
     )
-    table.add_column("#", justify="right", style="dim", no_wrap=True)
-    table.add_column("Filename", style="bold cyan")
-    table.add_column("Location", style="yellow")
-    table.add_column("Size", justify="right", style="green", no_wrap=True)
+    table.add_column("#", justify="right", style=theme.muted_style, no_wrap=True)
+    table.add_column("Filename", style=theme.bold_primary_style)
+    table.add_column("Location", style=theme.warning_style)
+    table.add_column("Size", justify="right", style=theme.success_style, no_wrap=True)
 
     for idx, path in enumerate(matches, start=1):
         try:
             size_str = format_bytes(path.stat().st_size)
         except OSError:
             size_str = "-"
-        table.add_row(str(idx), path.name, str(path.parent), size_str)
+        table.add_row(str(idx), escape(path.name), escape(str(path.parent)), escape(size_str))
 
     console.print(table)
 
     # Status notifications
     if hit_limit:
-        console.print(f"[bold yellow]Result limit reached (capped at {limit} items). Refine search or use --limit to view more.[/bold yellow]")
+        console.print(
+            theme.format_warning(
+                f"Result limit reached (capped at {limit} items). Refine search or use --limit to view more.",
+                bold=True,
+            )
+        )
     if skipped_count > 0:
-        console.print(f"[dim]{skipped_count} folder(s) skipped due to permission restrictions.[/dim]")
+        console.print(theme.format_muted(f"{skipped_count} folder(s) skipped due to permission restrictions."))
     console.print()
 
 

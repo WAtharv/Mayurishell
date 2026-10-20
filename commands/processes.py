@@ -1,10 +1,9 @@
 """Process inspection and management commands: processes, process find, process info, process kill."""
 from __future__ import annotations
 
-import re
 from typing import Any
 
-from rich.panel import Panel
+from rich.markup import escape
 from rich.table import Table
 
 from commands.files import confirm_prompt
@@ -42,6 +41,7 @@ def handle_processes(context: Any, args: list[str]) -> None:
     Usage: processes [--sort cpu|memory|name] [--limit N]
     """
     console = context.console
+    theme = context.theme
     sort_by = "memory"
     limit = 20
 
@@ -53,7 +53,7 @@ def handle_processes(context: Any, args: list[str]) -> None:
             if sort_val in ("cpu", "memory", "name"):
                 sort_by = sort_val
             else:
-                console.print(f"[bold red]Invalid sort option '{args[i + 1]}'.[/bold red] Choose from: cpu, memory, name.")
+                console.print(f"{theme.format_error('Invalid sort option:')} '{escape(args[i + 1])}'. Choose from: cpu, memory, name.")
                 return
             i += 2
         elif arg.startswith("--sort="):
@@ -61,7 +61,7 @@ def handle_processes(context: Any, args: list[str]) -> None:
             if sort_val in ("cpu", "memory", "name"):
                 sort_by = sort_val
             else:
-                console.print(f"[bold red]Invalid sort option '{sort_val}'.[/bold red] Choose from: cpu, memory, name.")
+                console.print(f"{theme.format_error('Invalid sort option:')} '{escape(sort_val)}'. Choose from: cpu, memory, name.")
                 return
             i += 1
         elif arg in ("--limit", "-l", "-n") and i + 1 < len(args):
@@ -70,7 +70,7 @@ def handle_processes(context: Any, args: list[str]) -> None:
                 if limit <= 0:
                     raise ValueError
             except ValueError:
-                console.print(f"[bold red]Invalid limit '{args[i + 1]}'.[/bold red] Must be a positive integer.")
+                console.print(f"{theme.format_error('Invalid limit:')} '{escape(args[i + 1])}'. Must be a positive integer.")
                 return
             i += 2
         elif arg.startswith("--limit="):
@@ -79,35 +79,33 @@ def handle_processes(context: Any, args: list[str]) -> None:
                 if limit <= 0:
                     raise ValueError
             except ValueError:
-                console.print(f"[bold red]Invalid limit value.[/bold red] Must be a positive integer.")
+                console.print(f"{theme.format_error('Invalid limit value.')} Must be a positive integer.")
                 return
             i += 1
         else:
             i += 1
 
-    console.print(f"[dim]Collecting process statistics (sampling CPU)...[/dim]")
+    console.print(theme.format_muted("Collecting process statistics (sampling CPU)..."))
     procs = list_processes(sort_by=sort_by, limit=limit)
 
-    table = Table(
-        title=f"[bold magenta]Running Processes (Top {len(procs)} by {sort_by.capitalize()})[/bold magenta]",
-        border_style="cyan",
-        header_style="bold cyan",
+    table = theme.create_table(
+        title=f"Running Processes (Top {len(procs)} by {sort_by.capitalize()})",
     )
-    table.add_column("PID", justify="right", style="dim", no_wrap=True)
-    table.add_column("Name", style="bold white", max_width=35, overflow="ellipsis", no_wrap=True)
-    table.add_column("CPU %", justify="right", style="yellow", no_wrap=True)
-    table.add_column("Memory (Working Set)", justify="right", style="green", no_wrap=True)
-    table.add_column("User", style="dim cyan", max_width=25, overflow="ellipsis", no_wrap=True)
+    table.add_column("PID", justify="right", style=theme.muted_style, no_wrap=True)
+    table.add_column("Name", style=theme.bold_text_style, max_width=35, overflow=theme.overflow, no_wrap=True)
+    table.add_column("CPU %", justify="right", style=theme.warning_style, no_wrap=True)
+    table.add_column("Memory (Working Set)", justify="right", style=theme.success_style, no_wrap=True)
+    table.add_column("User", style=theme.muted_style, max_width=25, overflow=theme.overflow, no_wrap=True)
 
     for p in procs:
         cpu_val = p.get("cpu_percent", 0.0)
-        cpu_str = f"[bold yellow]{cpu_val:.1f}%[/bold yellow]" if cpu_val > 0.0 else f"{cpu_val:.1f}%"
+        cpu_str = theme.format_warning(f"{cpu_val:.1f}%", bold=True) if cpu_val > 0.0 else f"{cpu_val:.1f}%"
         table.add_row(
-            str(p.get("pid", "")),
-            p.get("name", ""),
+            escape(str(p.get("pid", ""))),
+            escape(str(p.get("name", ""))),
             cpu_str,
-            p.get("memory_formatted", ""),
-            p.get("username", ""),
+            escape(str(p.get("memory_formatted", ""))),
+            escape(str(p.get("username", ""))),
         )
 
     console.print(table)
@@ -116,33 +114,32 @@ def handle_processes(context: Any, args: list[str]) -> None:
 def handle_process_find(context: Any, args: list[str]) -> None:
     """Search for running processes by partial, case-insensitive name match."""
     console = context.console
+    theme = context.theme
     if not args:
-        console.print("[bold red]Usage:[/bold red] process find <name>")
+        console.print(f"{theme.format_error('Usage:')} process find <name>")
         return
 
     query = args[0].strip()
     matches = find_processes(query)
 
     if not matches:
-        console.print(f"[dim]No running processes found matching '{query}'.[/dim]")
+        console.print(theme.format_muted(f"No running processes found matching '{escape(query)}'."))
         return
 
-    table = Table(
-        title=f"[bold magenta]Processes Matching '{query}' ({len(matches)} found)[/bold magenta]",
-        border_style="cyan",
-        header_style="bold cyan",
+    table = theme.create_table(
+        title=f"Processes Matching '{escape(query)}' ({len(matches)} found)",
     )
-    table.add_column("PID", justify="right", style="dim", no_wrap=True)
-    table.add_column("Name", style="bold white", max_width=35, overflow="ellipsis", no_wrap=True)
-    table.add_column("Memory (Working Set)", justify="right", style="green", no_wrap=True)
-    table.add_column("User", style="dim cyan", max_width=25, overflow="ellipsis", no_wrap=True)
+    table.add_column("PID", justify="right", style=theme.muted_style, no_wrap=True)
+    table.add_column("Name", style=theme.bold_text_style, max_width=35, overflow=theme.overflow, no_wrap=True)
+    table.add_column("Memory (Working Set)", justify="right", style=theme.success_style, no_wrap=True)
+    table.add_column("User", style=theme.muted_style, max_width=25, overflow=theme.overflow, no_wrap=True)
 
     for p in matches:
         table.add_row(
-            str(p.get("pid", "")),
-            p.get("name", ""),
-            p.get("memory_formatted", ""),
-            p.get("username", ""),
+            escape(str(p.get("pid", ""))),
+            escape(str(p.get("name", ""))),
+            escape(str(p.get("memory_formatted", ""))),
+            escape(str(p.get("username", ""))),
         )
 
     console.print(table)
@@ -151,70 +148,72 @@ def handle_process_find(context: Any, args: list[str]) -> None:
 def handle_process_info(context: Any, args: list[str]) -> None:
     """Inspect a single process by PID without exposing cmdline or environment variables."""
     console = context.console
+    theme = context.theme
     if not args:
-        console.print("[bold red]Usage:[/bold red] process info <pid>")
+        console.print(f"{theme.format_error('Usage:')} process info <pid>")
         return
 
     pid, err = parse_pid(args[0])
     if err:
-        console.print(f"[bold red]Error:[/bold red] {err}")
+        console.print(f"{theme.format_error('Error:')} {escape(err)}")
         return
 
     info = get_process_detail(pid)
     if not info:
-        console.print(f"[bold red]Error:[/bold red] Process with PID {pid} was not found (it may have exited).")
+        console.print(f"{theme.format_error('Error:')} Process with PID {pid} was not found (it may have exited).")
         return
 
     grid = Table.grid(padding=(0, 2))
-    grid.add_column("Field", style="bold cyan", justify="right")
-    grid.add_column("Value", style="white")
+    grid.add_column("Field", style=theme.bold_primary_style, justify="right")
+    grid.add_column("Value", style=theme.text_style, overflow="fold")
 
-    grid.add_row("Process Name:", info.get("name", ""))
-    grid.add_row("PID:", str(info.get("pid", "")))
-    grid.add_row("Status:", info.get("status", ""))
-    grid.add_row("User:", info.get("user", ""))
-    grid.add_row("Executable Path:", info.get("exe", ""))
-    grid.add_row("Thread Count:", str(info.get("threads", 0)))
+    grid.add_row("Process Name:", escape(str(info.get("name", ""))))
+    grid.add_row("PID:", escape(str(info.get("pid", ""))))
+    grid.add_row("Status:", escape(str(info.get("status", ""))))
+    grid.add_row("User:", escape(str(info.get("user", ""))))
+    grid.add_row("Executable Path:", escape(str(info.get("exe", ""))))
+    grid.add_row("Thread Count:", escape(str(info.get("threads", 0))))
     grid.add_row("CPU Utilization:", f"{info.get('cpu_percent', 0.0):.1f}%")
-    grid.add_row("Memory (Working Set):", info.get("memory_rss_formatted", "0 MB"))
-    grid.add_row("Memory (Virtual / VMS):", info.get("memory_vms_formatted", "0 MB"))
-    grid.add_row("Start Time:", info.get("start_time", "Unavailable"))
-    grid.add_row("Parent PID:", str(info.get("ppid") if info.get("ppid") is not None else "N/A"))
+    grid.add_row("Memory (Working Set):", escape(str(info.get("memory_rss_formatted", "0 MB"))))
+    grid.add_row("Memory (Virtual / VMS):", escape(str(info.get("memory_vms_formatted", "0 MB"))))
+    grid.add_row("Start Time:", escape(str(info.get("start_time", "Unavailable"))))
+    grid.add_row("Parent PID:", escape(str(info.get("ppid") if info.get("ppid") is not None else "N/A")))
 
-    panel = Panel(grid, title=f"[bold magenta]Process Details: {info.get('name', '')} (PID {pid})[/bold magenta]", border_style="cyan", expand=False)
+    panel = theme.create_panel(grid, title=f"Process Details: {escape(info.get('name', ''))} (PID {pid})", expand=False)
     console.print(panel)
 
 
 def handle_process_kill(context: Any, args: list[str]) -> None:
     """Safely terminate or kill a process by PID with confirmation and protection guards."""
     console = context.console
+    theme = context.theme
     force = "--force" in args or "-f" in args
     clean_args = [a for a in args if a not in ("--force", "-f")]
 
     if not clean_args:
-        console.print("[bold red]Usage:[/bold red] process kill <pid> [--force]")
+        console.print(f"{theme.format_error('Usage:')} process kill <pid> [--force]")
         return
 
     if len(clean_args) > 1:
-        console.print("[bold red]Error:[/bold red] Process kill accepts only one PID at a time. No multiple or wildcard kills.")
+        console.print(f"{theme.format_error('Error:')} Process kill accepts only one PID at a time. No multiple or wildcard kills.")
         return
 
     raw_pid = clean_args[0]
     pid, err = parse_pid(raw_pid)
     if err:
-        console.print(f"[bold red]Error:[/bold red] {err}")
+        console.print(f"{theme.format_error('Error:')} {escape(err)}")
         return
 
     # Check protected status first
     is_prot, reason = is_protected_process(pid)
     if is_prot:
-        console.print(f"[bold red]Action Refused:[/bold red] {reason}")
+        console.print(f"{theme.format_error('Action Refused:')} {escape(reason)}")
         return
 
     # Fetch metadata for confirmation
     detail = get_process_detail(pid)
     if not detail:
-        console.print(f"[bold red]Error:[/bold red] Process with PID {pid} not found (may have already exited).")
+        console.print(f"{theme.format_error('Error:')} Process with PID {pid} not found (may have already exited).")
         return
 
     pname = detail.get("name", f"PID {pid}")
@@ -222,13 +221,16 @@ def handle_process_kill(context: Any, args: list[str]) -> None:
 
     # Prompt user with (y/N)
     if force:
-        msg = f"[bold red]Are you sure you want to FORCE KILL process '{pname}' (PID {pid})? This cannot be undone and may cause data loss.[/bold red]"
+        msg = theme.format_error(
+            f"Are you sure you want to FORCE KILL process '{escape(pname)}' (PID {pid})? This cannot be undone and may cause data loss.",
+            bold=True,
+        )
     else:
-        msg = f"Are you sure you want to terminate process '{pname}' (PID {pid})?"
+        msg = f"Are you sure you want to terminate process '{escape(pname)}' (PID {pid})?"
 
-    confirmed = confirm_prompt(console, msg, default_yes=False)
+    confirmed = confirm_prompt(console, msg, default_yes=False, theme=theme)
     if not confirmed:
-        console.print("[dim]Process termination cancelled by user.[/dim]")
+        console.print(theme.format_muted("Process termination cancelled by user."))
         return
 
     # Execute guarded kill with PID recycling check
@@ -240,22 +242,23 @@ def handle_process_kill(context: Any, args: list[str]) -> None:
     )
 
     if success:
-        console.print(f"[bold green]Success:[/bold green] {res_msg}")
+        console.print(f"{theme.format_success('Success:', bold=True)} {escape(res_msg)}")
     else:
-        console.print(f"[bold red]Failed:[/bold red] {res_msg}")
+        console.print(f"{theme.format_error('Failed:', bold=True)} {escape(res_msg)}")
 
 
 def handle_process_dispatcher(context: Any, args: list[str]) -> None:
     """Dispatcher command routing 'process find', 'process info', 'process kill', and 'process list'."""
     console = context.console
+    theme = context.theme
     if not args:
         console.print(
-            "[bold cyan]MayuriShell Process Management[/bold cyan]\n"
-            "Usage:\n"
-            "  [bold white]processes[/bold white] [--sort cpu|memory|name] [--limit N]  - List active processes\n"
-            "  [bold white]process find <name>[/bold white]                           - Search processes by name\n"
-            "  [bold white]process info <pid>[/bold white]                            - Display details for a PID\n"
-            "  [bold white]process kill <pid> [--force][/bold white]                  - Terminate process by PID\n"
+            f"{theme.format_primary('MayuriShell Process Management', bold=True)}\n"
+            f"Usage:\n"
+            f"  {theme.format_text('processes', bold=True)} [--sort cpu|memory|name] [--limit N]  - List active processes\n"
+            f"  {theme.format_text('process find <name>', bold=True)}                           - Search processes by name\n"
+            f"  {theme.format_text('process info <pid>', bold=True)}                            - Display details for a PID\n"
+            f"  {theme.format_text('process kill <pid> [--force]', bold=True)}                  - Terminate process by PID\n"
         )
         return
 
@@ -271,7 +274,11 @@ def handle_process_dispatcher(context: Any, args: list[str]) -> None:
     elif subcmd in ("list", "ls"):
         handle_processes(context, sub_args)
     else:
-        console.print(f"[bold red]Unknown process subcommand '{subcmd}'.[/bold red] Valid subcommands: find, info, kill, list.")
+        err_msg = theme.format_error(f"Unknown process subcommand '{escape(subcmd)}'.")
+        console.print(
+            f"{err_msg} "
+            f"Valid subcommands: find, info, kill, list."
+        )
 
 
 def register_process_commands(registry: CommandRegistry) -> None:

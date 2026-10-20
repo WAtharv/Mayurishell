@@ -3,8 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from rich.panel import Panel
-from rich.table import Table
+from rich.markup import escape
 
 from core.aliases import is_valid_name
 from core.registry import ArgumentRules, CommandInfo, CommandRegistry
@@ -44,59 +43,70 @@ def create_app_launcher_handler(app_name: str, target: str):
     """Factory to create a command handler for a specific application shortcut."""
     def handler(context: Any, args: list[str]) -> None:
         console = context.console
+        theme = context.theme
         # Check current target from config in case it was updated
         current_target = context.config.get_applications().get(app_name.lower(), target)
         success = launch_detached(current_target, args)
         if success:
-            console.print(f"Launched {app_name}")
+            console.print(f"Launched {escape(app_name)}")
         else:
-            console.print(f"[bold red]Application not found:[/bold red] '{app_name}' (target: [dim]{current_target}[/dim])")
-            console.print(f"  Please verify it is installed or update its target with: [bold cyan]add-app {app_name} <path>[/bold cyan]")
+            console.print(
+                f"{theme.format_error('Application not found:')} '{escape(app_name)}' "
+                f"(target: {theme.format_muted(escape(current_target))})"
+            )
+            console.print(
+                f"  Please verify it is installed or update its target with: "
+                f"{theme.format_primary(f'add-app {app_name} <path>', bold=True)}"
+            )
     return handler
 
 
 def handle_apps(context: Any, args: list[str]) -> None:
     """List configured applications and their resolution status."""
     console = context.console
+    theme = context.theme
     apps = context.config.get_applications()
 
     if not apps:
-        console.print("[dim]No applications configured.[/dim]")
+        console.print(theme.format_muted("No applications configured."))
         return
 
-    table = Table(
-        title="[bold magenta]Configured Applications[/bold magenta]",
-        border_style="purple",
-        header_style="bold cyan",
+    table = theme.create_table(
+        title="Configured Applications",
     )
-    table.add_column("Command", style="bold cyan", no_wrap=True)
-    table.add_column("Target", style="yellow")
-    table.add_column("Status", style="bold")
+    table.add_column("Command", style=theme.bold_primary_style, no_wrap=True)
+    table.add_column("Target", style=theme.warning_style)
+    table.add_column("Status", style=theme.bold_text_style)
 
     for name, target in sorted(apps.items()):
         if is_uri(target):
-            status = "[green]URI Protocol[/green]"
+            status = theme.format_success("URI Protocol")
         else:
             resolved = find_executable(target)
             if resolved:
-                status = "[green]Found[/green]"
+                status = theme.format_success("Found")
             else:
-                status = "[red]Not Found[/red]"
-        table.add_row(name, target, status)
+                status = theme.format_error("Not Found")
+        table.add_row(escape(name), escape(target), status)
 
     console.print(table)
-    console.print("[dim]Launch an app by typing its command name (e.g. [bold cyan]code[/bold cyan], [bold cyan]notepad[/bold cyan]).[/dim]\n")
+    console.print(
+        f"{theme.format_muted('Launch an app by typing its command name (e.g. ')}"
+        f"{theme.format_primary('code', bold=True)}{theme.format_muted(', ')}"
+        f"{theme.format_primary('notepad', bold=True)}{theme.format_muted(').')}\n"
+    )
 
 
 def handle_add_app(context: Any, args: list[str]) -> None:
     """Add or update an application shortcut."""
     console = context.console
+    theme = context.theme
     name = args[0].strip().lower()
     target = args[1].strip()
 
     err = check_shortcut_collision(name, "applications", context)
     if err:
-        console.print(f"[bold red]Error:[/bold red] {err}")
+        console.print(f"{theme.format_error('Error:')} {escape(err)}")
         return
 
     context.config.set_shortcut("applications", name, target)
@@ -112,7 +122,12 @@ def handle_add_app(context: Any, args: list[str]) -> None:
         )
     )
 
-    console.print(f"[green]Application shortcut '[bold cyan]{name}[/bold cyan]' set to '[yellow]{target}[/yellow]'.[/green]")
+    console.print(
+        f"{theme.format_success('Application shortcut')} "
+        f"'{theme.format_primary(escape(name), bold=True)}' "
+        f"{theme.format_success('set to')} "
+        f"'{theme.format_warning(escape(target))}'."
+    )
 
 
 def register_application_commands(registry: CommandRegistry, config: Any) -> None:
