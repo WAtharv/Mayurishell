@@ -1,4 +1,4 @@
-# MayuriShell 🐾🌸
+# MayuriShell 
 
 **Your PC. Your Commands.**  
 *A customizable command environment and personal productivity tool for Windows with a cozy, kawaii aesthetic.*
@@ -117,4 +117,11 @@ MayuriShell.exe --config-dir <dir> # Override configuration directory path
 
 ## License
 
-MIT License. Designed and crafted with love.
+MayuriShell is licensed under the [MIT License](LICENSE).
+
+Copyright (c) 2026 Atharv Patil.
+
+You are free to use, copy, modify, merge, publish, distribute, sublicense, and sell
+copies of MayuriShell, subject to the conditions of the MIT License.
+
+See the [LICENSE](LICENSE) file for the complete license terms.
