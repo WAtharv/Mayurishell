@@ -95,6 +95,10 @@ class MayuriCompleter(Completer):
             yield from self._complete_alias_names(current_token)
         elif cmd == "history":
             yield from self._complete_history_subcommands(current_token)
+        elif cmd == "process":
+            yield from self._complete_process_command(tokens, current_token)
+        elif cmd == "processes":
+            yield from self._complete_processes_command(tokens, current_token)
         elif cmd == "cd":
             yield from self._complete_paths(current_token, only_dirs=True, include_shortcuts=True)
         elif cmd in ("ls", "open", "info", "copy", "move", "rename", "delete", "touch", "add-folder"):
@@ -233,6 +237,50 @@ class MayuriCompleter(Completer):
                 display="clear",
                 display_meta="Clear command history",
             )
+
+    def _complete_process_command(self, tokens: list[str], current_token: str) -> Iterable[Completion]:
+        """Suggest process subcommands: find, info, kill, list."""
+        if len(tokens) == 1:
+            subcmds = [
+                ("find", "Search processes by name"),
+                ("info", "Show process details by PID"),
+                ("kill", "Terminate process by PID"),
+                ("list", "List running processes"),
+            ]
+            prefix = current_token.lower()
+            for sub, desc in subcmds:
+                if sub.startswith(prefix):
+                    yield Completion(sub, start_position=-len(current_token), display=sub, display_meta=desc)
+        elif len(tokens) >= 2 and tokens[1].lower() == "kill":
+            if "--force".startswith(current_token.lower()):
+                yield Completion("--force", start_position=-len(current_token), display="--force", display_meta="Force kill process")
+
+    def _complete_processes_command(self, tokens: list[str], current_token: str) -> Iterable[Completion]:
+        """Suggest options and values for processes command."""
+        prev = tokens[-1].lower() if tokens else ""
+        if prev in ("--sort", "-s"):
+            for val in ("cpu", "memory", "name"):
+                if val.startswith(current_token.lower()):
+                    yield Completion(val, start_position=-len(current_token), display=val, display_meta=f"Sort by {val}")
+            return
+
+        if current_token.startswith("--sort="):
+            val_part = current_token.split("=", 1)[1].lower()
+            for val in ("cpu", "memory", "name"):
+                if val.startswith(val_part):
+                    full = f"--sort={val}"
+                    yield Completion(full, start_position=-len(current_token), display=val, display_meta=f"Sort by {val}")
+            return
+
+        # Suggest flags
+        flags = [
+            ("--sort", "Sort processes (cpu, memory, name)"),
+            ("--limit", "Maximum number of processes to show"),
+        ]
+        prefix = current_token.lower()
+        for flag, desc in flags:
+            if flag.startswith(prefix):
+                yield Completion(flag, start_position=-len(current_token), display=flag, display_meta=desc)
 
     def _complete_paths(
         self, current_token: str, only_dirs: bool = False, include_shortcuts: bool = False

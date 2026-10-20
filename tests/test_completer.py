@@ -181,3 +181,28 @@ def test_context_specific_subcommands(tmp_path: Path) -> None:
     doc_hist = Document("history cl", 10)
     comp_hist = [c.text for c in completer.get_completions(doc_hist, CompleteEvent())]
     assert "clear" in comp_hist
+
+
+def test_process_and_processes_completions(tmp_path: Path) -> None:
+    """Test process subcommands and processes --sort options completion."""
+    context, completer = create_completer_context(tmp_path)
+
+    # process subcommands: find, info, kill, list
+    doc_proc = Document("process ", 8)
+    subcmds = [c.text for c in completer.get_completions(doc_proc, CompleteEvent())]
+    assert "find" in subcmds
+    assert "info" in subcmds
+    assert "kill" in subcmds
+    assert "list" in subcmds
+
+    # process kill --force flag
+    doc_kill = Document("process kill 1234 --f", 21)
+    kill_flags = [c.text for c in completer.get_completions(doc_kill, CompleteEvent())]
+    assert "--force" in kill_flags
+
+    # processes --sort options
+    doc_sort = Document("processes --sort ", 17)
+    sort_opts = [c.text for c in completer.get_completions(doc_sort, CompleteEvent())]
+    assert "cpu" in sort_opts
+    assert "memory" in sort_opts
+    assert "name" in sort_opts
