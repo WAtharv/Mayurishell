@@ -8,6 +8,7 @@ from rich.cells import cell_len
 from rich.markup import escape
 from rich.table import Table
 
+from core.executor import CommandResult
 from core.mascots import VALID_MASCOTS, get_mascot, resolve_mascot_name
 from core.registry import ArgumentRules, CommandInfo, CommandRegistry
 from core.theme import THEMES, ThemeManager
@@ -166,12 +167,13 @@ def render_fetch(context: Any) -> None:
         console.print(f"{theme.format_muted(f'Tip: {tip}')}\n")
 
 
-def handle_fetch(context: Any, args: list[str]) -> None:
+def handle_fetch(context: Any, args: list[str]) -> CommandResult:
     """Display the system fetch dashboard with mascot art."""
     render_fetch(context)
+    return CommandResult.success()
 
 
-def handle_theme(context: Any, args: list[str]) -> None:
+def handle_theme(context: Any, args: list[str]) -> CommandResult:
     """List available themes or switch to a theme by name."""
     console = context.console
     theme_mgr: ThemeManager = context.theme_manager
@@ -191,12 +193,11 @@ def handle_theme(context: Any, args: list[str]) -> None:
 
         console.print(table)
         console.print(theme.format_muted("Use 'theme <name>' to apply a theme, or 'theme preview' to inspect palettes."))
-        return
+        return CommandResult.success()
 
     sub = args[0].lower()
     if sub == "preview":
-        handle_theme_preview(context)
-        return
+        return handle_theme_preview(context)
 
     # Set theme
     success, msg = theme_mgr.set_theme(sub)
@@ -211,11 +212,13 @@ def handle_theme(context: Any, args: list[str]) -> None:
             sample = theme_mgr.current.format(token, f"Sample {token.capitalize()}")
             preview_table.add_row(token, f"{sample} ({val})")
         console.print(preview_table)
+        return CommandResult.success()
     else:
         console.print(theme.format_error(f"Error: {msg}"))
+        return CommandResult.fail(msg)
 
 
-def handle_theme_preview(context: Any) -> None:
+def handle_theme_preview(context: Any) -> CommandResult:
     """Preview all visual themes side-by-side or in structured comparison tables."""
     console = context.console
     theme_mgr: ThemeManager = context.theme_manager
@@ -235,9 +238,10 @@ def handle_theme_preview(context: Any) -> None:
         table.add_row(heading_sample, accent_sample, success_sample, escape(thm.description))
         console.print(table)
         console.print()
+    return CommandResult.success()
 
 
-def handle_mascot(context: Any, args: list[str]) -> None:
+def handle_mascot(context: Any, args: list[str]) -> CommandResult:
     """List available mascot characters or set your active companion."""
     console = context.console
     theme_mgr: ThemeManager = context.theme_manager
@@ -261,14 +265,14 @@ def handle_mascot(context: Any, args: list[str]) -> None:
 
         console.print(table)
         console.print(theme.format_muted("Use 'mascot <name|random>' to select your mascot."))
-        return
+        return CommandResult.success()
 
     choice = args[0].lower()
     valid_choices = list(VALID_MASCOTS) + ["random"]
     if choice not in valid_choices:
         valid_str = ", ".join(valid_choices)
         console.print(theme.format_error(f"Error: Unknown mascot '{escape(choice)}'. Available: {valid_str}"))
-        return
+        return CommandResult.fail("Unknown mascot")
 
     context.config.set_mascot_name(choice)
     resolved = resolve_mascot_name(choice)
@@ -278,9 +282,10 @@ def handle_mascot(context: Any, args: list[str]) -> None:
     art_str = "\n".join(m.art_lines)
     console.print(theme.format_primary(art_str) if not theme.is_plain else art_str)
     console.print(f"{m.face} Welcome to the team!\n")
+    return CommandResult.success()
 
 
-def handle_pet(context: Any, args: list[str]) -> None:
+def handle_pet(context: Any, args: list[str]) -> CommandResult:
     """Pet your animal mascot companion and watch them react!"""
     console = context.console
     theme_mgr: ThemeManager = context.theme_manager
@@ -302,6 +307,7 @@ def handle_pet(context: Any, args: list[str]) -> None:
 
     console.print(theme.format_accent(f"You gently pet {resolved.capitalize()}..."))
     console.print(theme.format_primary(f"{m.face} {reaction_text}"))
+    return CommandResult.success()
 
 
 def register_appearance_commands(registry: CommandRegistry) -> None:

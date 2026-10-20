@@ -37,10 +37,10 @@ class HistoryManager:
 
     def __init__(self, history_file: Path) -> None:
         self.history_file = history_file
-        self.entries: list[dict[str, str]] = []
+        self.entries: list[dict[str, Any]] = []
         self.load()
 
-    def load(self) -> list[dict[str, str]]:
+    def load(self) -> list[dict[str, Any]]:
         """Load history entries from history.json safely."""
         if not self.history_file.exists():
             self.entries = []
@@ -51,13 +51,16 @@ class HistoryManager:
                 data = json.load(f)
 
             if isinstance(data, list):
-                normalized: list[dict[str, str]] = []
+                normalized: list[dict[str, Any]] = []
                 for item in data:
                     if isinstance(item, dict) and "command" in item:
-                        normalized.append({
+                        entry: dict[str, Any] = {
                             "timestamp": str(item.get("timestamp", "")),
                             "command": str(item["command"]),
-                        })
+                        }
+                        if "success" in item:
+                            entry["success"] = bool(item["success"])
+                        normalized.append(entry)
                     elif isinstance(item, str):
                         normalized.append({
                             "timestamp": "",
@@ -78,7 +81,7 @@ class HistoryManager:
         serialized = json.dumps(self.entries, indent=2, ensure_ascii=False)
         safe_atomic_write(self.history_file, serialized)
 
-    def add(self, command: str) -> bool:
+    def add(self, command: str, success: bool = True) -> bool:
         """Add a command to history if it is non-empty and contains no secrets.
         
         Returns True if stored, False if skipped.
@@ -96,7 +99,11 @@ class HistoryManager:
             return False
 
         timestamp = datetime.datetime.now().isoformat(timespec="seconds")
-        self.entries.append({"timestamp": timestamp, "command": stripped})
+        self.entries.append({
+            "timestamp": timestamp,
+            "command": stripped,
+            "success": success,
+        })
         
         # Keep reasonable max history in file (e.g. 5000 entries)
         if len(self.entries) > 5000:
@@ -108,6 +115,15 @@ class HistoryManager:
             logger.error("Failed to save history: %s", exc)
 
         return True
+
+    def update_last_status(self, success: bool) -> None:
+        """Update the success status of the most recent history entry."""
+        if self.entries:
+            self.entries[-1]["success"] = bool(success)
+            try:
+                self.save()
+            except Exception as exc:
+                logger.error("Failed to update history status: %s", exc)
 
     def get_all(self) -> list[dict[str, str]]:
         """Return all history entries."""

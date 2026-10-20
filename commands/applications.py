@@ -7,7 +7,9 @@ from rich.markup import escape
 
 from core.aliases import is_valid_name
 from core.registry import ArgumentRules, CommandInfo, CommandRegistry
-from services.application_discovery import find_executable, is_uri, launch_detached
+from services.application_discovery import find_executable, is_startfile_target, is_uri, launch_detached
+from services.file_service import validate_app_path_argument
+from core.executor import CommandResult
 
 
 def check_shortcut_collision(name: str, current_section: str, context: Any) -> str | None:
@@ -41,15 +43,40 @@ def check_shortcut_collision(name: str, current_section: str, context: Any) -> s
 
 def create_app_launcher_handler(app_name: str, target: str):
     """Factory to create a command handler for a specific application shortcut."""
-    def handler(context: Any, args: list[str]) -> None:
+    def handler(context: Any, args: list[str]) -> CommandResult:
         console = context.console
         theme = context.theme
-        # Check current target from config in case it was updated
         current_target = context.config.get_applications().get(app_name.lower(), target)
-        success = launch_detached(current_target, args)
-        if success:
-            console.print(f"Launched {escape(app_name)}")
-        else:
+
+        # 1. URI and shell:AppsFolder apps refuse arguments with a clear message
+        if is_uri(current_target) or is_startfile_target(current_target):
+            if args:
+                console.print(
+                    f"{theme.format_error('Error:')} Application '{escape(app_name)}' "
+                    f"does not accept arguments (protocol/store application)."
+                )
+                return CommandResult.fail()
+            success = launch_detached(current_target, [])
+            if success:
+                console.print(f"Launched {escape(app_name)}")
+                return CommandResult.success()
+            else:
+                console.print(f"{theme.format_error('Failed to launch application:')} '{escape(app_name)}'")
+                return CommandResult.fail()
+
+        # 2. Check if target is VS Code or resolves to batch file
+        resolved_exe = find_executable(current_target)
+        if not resolved_exe:
+            if app_name.lower() == "code" or current_target.lower() in ("code", "code.exe"):
+                console.print(
+                    f"{theme.format_error('Application not found:')} '{escape(app_name)}' "
+                    f"(target: {theme.format_muted(escape(current_target))})"
+                )
+                console.print(
+                    f"  VS Code executable (Code.exe) not found. Please install VS Code or update its target with: "
+                    f"{theme.format_primary(f'add-app {app_name} <path-to-Code.exe>', bold=True)}"
+                )
+                return CommandResult.fail()
             console.print(
                 f"{theme.format_error('Application not found:')} '{escape(app_name)}' "
                 f"(target: {theme.format_muted(escape(current_target))})"
@@ -58,6 +85,34 @@ def create_app_launcher_handler(app_name: str, target: str):
                 f"  Please verify it is installed or update its target with: "
                 f"{theme.format_primary(f'add-app {app_name} <path>', bold=True)}"
             )
+            return CommandResult.fail()
+
+        # 3. If args provided, validate that each is an existing path, not a flag
+        resolved_abs_args: list[str] = []
+        if args:
+            if resolved_exe.lower().endswith((".bat", ".cmd")):
+                console.print(
+                    f"{theme.format_error('Error:')} Cannot pass arguments to batch/cmd script "
+                    f"'{escape(resolved_exe)}'. Direct .exe required."
+                )
+                return CommandResult.fail()
+
+            for raw_arg in args:
+                valid, resolved_p, err = validate_app_path_argument(raw_arg, context)
+                if not valid:
+                    console.print(f"{theme.format_error('Error:')} {escape(err)}")
+                    return CommandResult.fail()
+                resolved_abs_args.append(str(resolved_p))
+
+        success = launch_detached(resolved_exe, resolved_abs_args)
+        if success:
+            console.print(f"Launched {escape(app_name)}")
+            return CommandResult.success()
+        else:
+            console.print(
+                f"{theme.format_error('Failed to launch application:')} '{escape(app_name)}'"
+            )
+            return CommandResult.fail()
     return handler
 
 
@@ -107,7 +162,7 @@ def handle_add_app(context: Any, args: list[str]) -> None:
     err = check_shortcut_collision(name, "applications", context)
     if err:
         console.print(f"{theme.format_error('Error:')} {escape(err)}")
-        return
+        return CommandResult.fail()
 
     context.config.set_shortcut("applications", name, target)
     
@@ -117,8 +172,9 @@ def handle_add_app(context: Any, args: list[str]) -> None:
             name=name,
             description=f"Launch application: {name}",
             handler=create_app_launcher_handler(name, target),
-            usage=f"{name} [args...]",
+            usage=f"{name} [paths...]",
             category="Applications",
+            arg_rules=ArgumentRules(min_args=0, max_args=None),
         )
     )
 
@@ -128,6 +184,7 @@ def handle_add_app(context: Any, args: list[str]) -> None:
         f"{theme.format_success('set to')} "
         f"'{theme.format_warning(escape(target))}'."
     )
+    return CommandResult.success()
 
 
 def register_application_commands(registry: CommandRegistry, config: Any) -> None:
@@ -161,7 +218,8 @@ def register_application_commands(registry: CommandRegistry, config: Any) -> Non
                 name=name.lower(),
                 description=f"Launch application: {name}",
                 handler=create_app_launcher_handler(name, target),
-                usage=f"{name} [args...]",
+                usage=f"{name} [paths...]",
                 category="Applications",
+                arg_rules=ArgumentRules(min_args=0, max_args=None),
             )
         )

@@ -9,10 +9,13 @@ from commands.builtins import register_builtin_commands
 from commands.customization import register_customization_commands
 from commands.files import register_file_commands
 from commands.navigation import register_navigation_commands
+from commands.organization import register_organization_commands
 from commands.processes import register_process_commands
+from commands.project_scaffolding import register_project_commands
 from commands.search import register_search_commands
 from commands.system import register_system_commands
 from commands.websites import register_website_commands
+from commands.workflows import register_workflow_commands
 from core.aliases import AliasManager
 from core.config_manager import ConfigManager
 from core.history import HistoryManager
@@ -46,6 +49,9 @@ def main() -> int:
         register_search_commands(registry)
         register_system_commands(registry)
         register_process_commands(registry)
+        register_organization_commands(registry, config_mgr)
+        register_project_commands(registry, config_mgr)
+        register_workflow_commands(registry, config_mgr)
 
         # Start shell
         shell = MayuriShell(

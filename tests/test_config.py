@@ -86,7 +86,7 @@ def test_deep_merge_defaults_preserves_user_settings(tmp_path: Path) -> None:
     assert reloaded.get_applications()["notepad"] == "C:\\Custom\\notepad.exe"
     assert reloaded.get_websites()["customsite"] == "https://custom.site"
     # Missing default restored
-    assert reloaded.get_websites()["youtube"] == "https://www.youtube.com"
+    assert reloaded.get_websites()["youtube"] == "https://www.youtube.com/results?search_query={query}"
 
 
 def test_shortcut_helpers(tmp_path: Path) -> None:

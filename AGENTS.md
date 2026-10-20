@@ -64,3 +64,11 @@ MayuriShell/
 - Mascot reacts: happy on success, worried on error, sleepy on exit.
 - A plain-text fallback theme must always exist for old consoles.
 - Look is a theme layer. It must never reduce functionality.
+
+## Command Failure Reporting & Reactive Mascot Moods
+Command handlers report execution outcomes uniformly by returning a `CommandResult` (`core/executor.py`):
+- `CommandResult.success(message)`: Command succeeded normally. The executor sets the mascot mood to `happy`.
+- `CommandResult.fail(message)`: Command encountered an error or refused an invalid action (e.g., flag argument, protected process, wildcard delete, bad alias, unknown command, missing folder). The executor sets the mascot mood to `worried`, marks the history entry as failed (`success=False`), and logs a warning with the command name only (no arguments or paths logged, preserving user privacy).
+- `CommandResult.cancel()`: The user aborted an interactive prompt or confirmation (e.g. answering 'N' to a prompt). The executor sets the mascot mood to `neutral` (neither happy nor worried), does not log a warning, and does not treat cancellation as an error.
+Handlers must use `CommandResult.fail()` / `CommandResult.cancel()` / `CommandResult.success()`.
+

@@ -70,6 +70,46 @@ def is_uri(target: str) -> bool:
     return is_startfile_target(target)
 
 
+def resolve_code_executable() -> str | None:
+    """Resolve the direct Code.exe executable for VS Code on Windows.
+    
+    Checks PATH for Code.exe directly, checks beside code.cmd if found,
+    and checks standard installation directories.
+    Never returns code.cmd or any batch wrapper.
+    """
+    # 1. Direct Code.exe on PATH
+    exe_on_path = shutil.which("Code.exe") or shutil.which("code.exe")
+    if exe_on_path and Path(exe_on_path).is_file():
+        return exe_on_path
+
+    # 2. Check if 'code' on PATH is an exe or cmd
+    which_code = shutil.which("code")
+    if which_code:
+        p = Path(which_code)
+        if p.suffix.lower() == ".exe" and p.is_file():
+            return str(p)
+        # If code.cmd or code.bat, look for Code.exe next to it (e.g. bin/code.cmd -> ../Code.exe)
+        candidate1 = p.parent.parent / "Code.exe"
+        if candidate1.is_file():
+            return str(candidate1)
+        candidate2 = p.parent / "Code.exe"
+        if candidate2.is_file():
+            return str(candidate2)
+
+    # 3. Known standard install locations
+    code_candidates = [
+        r"%LOCALAPPDATA%\Programs\Microsoft VS Code\Code.exe",
+        r"%PROGRAMFILES%\Microsoft VS Code\Code.exe",
+        r"%PROGRAMFILES(X86)%\Microsoft VS Code\Code.exe",
+    ]
+    for raw_loc in code_candidates:
+        expanded_loc = Path(os.path.expanduser(os.path.expandvars(raw_loc)))
+        if expanded_loc.is_file():
+            return str(expanded_loc)
+
+    return None
+
+
 def find_executable(target: str) -> str | None:
     """Find the full executable path for an application.
     
@@ -77,6 +117,13 @@ def find_executable(target: str) -> str | None:
     Does NOT scan recursively.
     """
     stripped = target.strip()
+    clean_target = stripped.lower()
+
+    # Special handling for VS Code to ensure Code.exe is resolved directly (never code.cmd)
+    if clean_target in ("code", "code.exe"):
+        code_exe = resolve_code_executable()
+        if code_exe:
+            return code_exe
 
     # 1. Direct path check (with env variable expansion)
     expanded = os.path.expandvars(stripped)
@@ -106,7 +153,11 @@ def find_executable(target: str) -> str | None:
     return None
 
 
-def launch_detached(target: str, args: Sequence[str] | None = None) -> bool:
+def launch_detached(
+    target: str,
+    args: Sequence[str] | None = None,
+    app_name: str | None = None,
+) -> bool:
     """Launch an application detached from MayuriShell with all console output silenced.
     
     This is the SINGLE entry point for all application launches in MayuriShell.
@@ -125,11 +176,15 @@ def launch_detached(target: str, args: Sequence[str] | None = None) -> bool:
     """
     cmd_args = list(args) if args else []
     stripped = target.strip()
+    log_name = app_name or Path(stripped).stem
 
     # 1. Handle URI-based, protocol, and Microsoft Store app launching via explorer.exe
     if is_startfile_target(stripped):
+        if cmd_args:
+            logger.warning("Refused to pass arguments to URI/Store application: %s", log_name)
+            return False
         try:
-            logger.info("Launching URI/Store target via explorer.exe: '%s'", stripped)
+            logger.info("Launching URI/Store target '%s' via explorer.exe", log_name)
             subprocess.Popen(
                 ["explorer.exe", stripped],
                 stdin=subprocess.DEVNULL,
@@ -137,20 +192,29 @@ def launch_detached(target: str, args: Sequence[str] | None = None) -> bool:
                 stderr=subprocess.DEVNULL,
                 shell=False,
             )
+            logger.info("Launched URI/Store target '%s' successfully", log_name)
             return True
         except Exception as exc:
-            logger.error("Failed to launch URI/Store target '%s' via explorer.exe: %s", stripped, exc)
+            logger.error("Failed to launch URI/Store target '%s' via explorer.exe: %s", log_name, exc)
             return False
 
     # 2. Handle executable launching
     exe_path = find_executable(stripped)
     if not exe_path:
-        logger.warning("Application executable not found for: '%s'", stripped)
+        logger.warning("Application executable not found for: '%s'", log_name)
         return False
+
+    # Guard against passing arguments to batch or cmd files to prevent command injection
+    if cmd_args:
+        exe_lower = exe_path.lower()
+        if exe_lower.endswith((".bat", ".cmd")) or stripped.lower().endswith((".bat", ".cmd")):
+            logger.warning("Refused to launch batch script with user arguments: %s", log_name)
+            return False
 
     cmd_list = [exe_path] + cmd_args
     try:
-        logger.info("Launching executable with CREATE_NEW_CONSOLE: %s", cmd_list)
+        # Log only application name, never argument paths
+        logger.info("Launching executable: %s", log_name)
         startupinfo = None
         creationflags = 0
 
@@ -170,9 +234,10 @@ def launch_detached(target: str, args: Sequence[str] | None = None) -> bool:
             close_fds=True,
             shell=False,
         )
+        logger.info("Executable launch completed: %s", log_name)
         return True
     except Exception as exc:
-        logger.warning("Failed direct launch for '%s': %s. Falling back to explorer.exe.", exe_path, exc)
+        logger.warning("Failed direct launch for '%s': %s. Falling back to explorer.exe.", log_name, exc)
         try:
             subprocess.Popen(
                 ["explorer.exe", exe_path],
@@ -181,9 +246,10 @@ def launch_detached(target: str, args: Sequence[str] | None = None) -> bool:
                 stderr=subprocess.DEVNULL,
                 shell=False,
             )
+            logger.info("Fallback launch completed for '%s'", log_name)
             return True
         except Exception as fallback_exc:
-            logger.error("Explorer fallback failed for '%s': %s", exe_path, fallback_exc)
+            logger.error("Explorer fallback failed for '%s': %s", log_name, fallback_exc)
             return False
 
 

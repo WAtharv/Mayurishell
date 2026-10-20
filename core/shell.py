@@ -47,6 +47,7 @@ class ShellContext:
         from core.theme import ThemeManager
         self.theme_manager: ThemeManager = theme_manager if theme_manager is not None else ThemeManager(config, console=self.console)
         self.running: bool = True
+        self.last_mood: str = "neutral"
 
     @property
     def theme(self) -> Any:
@@ -169,7 +170,7 @@ class MayuriShell:
             f'<style color="{primary_color}">{escaped_symbol}</style> '
         )
 
-    def _show_reactive_mascot(self, cmd_name: str, success: bool) -> None:
+    def _show_reactive_mascot(self, cmd_name: str, mood_or_success: str | bool) -> None:
         """Display subtle reactive mascot face after command execution."""
         import sys
         if not sys.stdout.isatty():
@@ -178,24 +179,31 @@ class MayuriShell:
         mode = self.context.config.get_reactive_mascot_mode()
         if mode == "off":
             return
-        if mode == "errors" and success:
+
+        if isinstance(mood_or_success, bool):
+            target_mood = "happy" if mood_or_success else "worried"
+        else:
+            target_mood = mood_or_success
+
+        if mode == "errors" and target_mood != "worried":
             return
 
         # Skip for specific non-content or self-rendering commands
-        if cmd_name.lower() in ("clear", "fetch", "pet", "mascot", "theme", "help"):
+        if cmd_name.lower() in ("clear", "fetch", "pet"):
+            return
+        if target_mood != "worried" and cmd_name.lower() in ("mascot", "theme", "help"):
             return
 
         from core.mascots import get_reactive_face, resolve_mascot_name
         mascot_name = self.context.config.get_mascot_name()
         resolved = resolve_mascot_name(mascot_name)
         theme = self.context.theme
-        mood = "happy" if success else "worried"
-        face = get_reactive_face(resolved, mood, is_plain=theme.is_plain)
+        face = get_reactive_face(resolved, target_mood, is_plain=theme.is_plain)
 
         if theme.is_plain:
             self.console.print(f" {face}\n")
         else:
-            self.console.print(f" [{theme.muted}]{face}[/{theme.muted}]\n")
+            self.console.print(f" {theme.format_muted(face)}\n")
 
     def run_command_line(self, line: str) -> bool:
         """Parse and execute a single command line.
@@ -207,7 +215,7 @@ class MayuriShell:
         if not stripped:
             return True
 
-        # Store in history
+        # Store in history (defaults to success=True until evaluated)
         self.context.history_manager.add(stripped)
 
         try:
@@ -217,13 +225,16 @@ class MayuriShell:
         except ParseError as p_err:
             theme = self.context.theme
             self.console.print(f"{theme.format_error('Syntax Error:')} {p_err}")
-            self._show_reactive_mascot("error", False)
+            self.executor.last_mood = "worried"
+            self.context.last_mood = "worried"
+            self.context.history_manager.update_last_status(success=False)
+            self._show_reactive_mascot("error", "worried")
             return False
 
-        success = self.executor.execute(parsed, self.context)
+        result = self.executor.execute(parsed, self.context)
         if self.context.running:
-            self._show_reactive_mascot(parsed.name, success)
-        return success
+            self._show_reactive_mascot(parsed.name, self.executor.last_mood)
+        return bool(result)
 
     def run(self) -> None:
         """Start and run the main interactive REPL loop."""

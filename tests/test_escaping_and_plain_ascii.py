@@ -12,10 +12,13 @@ from commands.builtins import register_builtin_commands
 from commands.customization import register_customization_commands
 from commands.files import register_file_commands
 from commands.navigation import register_navigation_commands
+from commands.organization import register_organization_commands
 from commands.processes import register_process_commands
+from commands.project_scaffolding import register_project_commands
 from commands.search import register_search_commands
 from commands.system import register_system_commands
 from commands.websites import register_website_commands
+from commands.workflows import register_workflow_commands
 from core.aliases import AliasManager
 from core.config_manager import ConfigManager
 from core.history import HistoryManager
@@ -45,6 +48,9 @@ def create_full_test_shell(tmp_path: Path, force_plain: bool = False) -> tuple[M
     register_search_commands(reg)
     register_system_commands(reg)
     register_process_commands(reg)
+    register_organization_commands(reg, cfg)
+    register_project_commands(reg, cfg)
+    register_workflow_commands(reg, cfg)
 
     console = Console(record=True, force_terminal=True, width=100)
     theme_mgr = ThemeManager(cfg, console=console)
@@ -127,6 +133,10 @@ def test_plain_mode_strictly_ascii_across_all_commands(tmp_path: Path) -> None:
         "theme",
         "mascot",
         "fetch",
+        "templates",
+        "workflow list",
+        "workflow validate",
+        "diagnostics",
     ]
 
     for cmd in commands_to_test:

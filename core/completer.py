@@ -88,6 +88,11 @@ class MayuriCompleter(Completer):
         # Resolve aliases if the first token is an alias
         cmd = self._resolve_alias_command(raw_cmd)
 
+        # Suppress completions after website shortcuts (free-form search queries)
+        websites = self.context.config.get_websites() if hasattr(self.context, "config") else {}
+        if cmd in websites:
+            return
+
         # 2. Context-specific commands
         if cmd in ("help", "command-info"):
             yield from self._complete_command_names(current_token)
@@ -103,7 +108,15 @@ class MayuriCompleter(Completer):
             yield from self._complete_process_command(tokens, current_token)
         elif cmd == "processes":
             yield from self._complete_processes_command(tokens, current_token)
-        elif cmd == "cd":
+        elif cmd == "organize":
+            yield from self._complete_organize(tokens, current_token)
+        elif cmd == "create-project":
+            yield from self._complete_create_project(tokens, current_token)
+        elif cmd == "workflow":
+            yield from self._complete_workflow(tokens, current_token)
+        elif cmd == "diagnostics":
+            yield from self._complete_diagnostics(tokens, current_token)
+        elif cmd in ("cd", "code"):
             yield from self._complete_paths(current_token, only_dirs=True, include_shortcuts=True)
         elif cmd in ("ls", "open", "info", "copy", "move", "rename", "delete", "touch", "add-folder"):
             yield from self._complete_paths(current_token, only_dirs=False, include_shortcuts=False)
@@ -317,6 +330,82 @@ class MayuriCompleter(Completer):
         for flag, desc in flags:
             if flag.startswith(prefix):
                 yield Completion(flag, start_position=-len(current_token), display=flag, display_meta=desc)
+
+    def _complete_organize(self, tokens: list[str], current_token: str) -> Iterable[Completion]:
+        """Suggest organize options, subcommands, and folder paths."""
+        prefix = current_token.lower()
+        # Suggest flags
+        if prefix.startswith("-"):
+            for flag, desc in [("--dry-run", "Preview proposed file moves"), ("--include-other", "Move uncategorized files to Other")]:
+                if flag.startswith(prefix):
+                    yield Completion(flag, start_position=-len(current_token), display=flag, display_meta=desc)
+            return
+
+        # Suggest undo subcommand
+        if "undo".startswith(prefix):
+            yield Completion("undo", start_position=-len(current_token), display="undo", display_meta="Reverse last organize run")
+
+        # Suggest directory paths and folder shortcuts
+        yield from self._complete_paths(current_token, only_dirs=True, include_shortcuts=True)
+
+    def _complete_create_project(self, tokens: list[str], current_token: str) -> Iterable[Completion]:
+        """Suggest templates and options for create-project."""
+        prefix = current_token.lower()
+        prev = tokens[-1].lower() if tokens else ""
+
+        if prev in ("--template", "-t"):
+            from commands.project_scaffolding import BUILTIN_TEMPLATES, get_custom_templates_dir
+            for t_name, t_desc in BUILTIN_TEMPLATES.items():
+                if t_name.startswith(prefix):
+                    yield Completion(t_name, start_position=-len(current_token), display=t_name, display_meta=t_desc[:30])
+            custom_dir = get_custom_templates_dir(self.context)
+            if custom_dir.exists() and custom_dir.is_dir():
+                for item in custom_dir.iterdir():
+                    if item.is_dir() and not item.is_symlink() and item.name.lower().startswith(prefix):
+                        yield Completion(item.name.lower(), start_position=-len(current_token), display=item.name.lower(), display_meta="Custom template")
+            return
+
+        # Suggest flags
+        for flag, desc in [("--template", "Specify starter template"), ("--here", "Scaffold inside current empty directory")]:
+            if flag.startswith(prefix):
+                yield Completion(flag, start_position=-len(current_token), display=flag, display_meta=desc)
+
+    def _complete_workflow(self, tokens: list[str], current_token: str) -> Iterable[Completion]:
+        """Suggest workflow subcommands, names, and options."""
+        prefix = current_token.lower()
+
+        if len(tokens) == 1:
+            subcmds = [
+                ("list", "List configured workflows"),
+                ("show", "Show steps for a workflow"),
+                ("run", "Execute a workflow"),
+                ("add", "Create a new workflow"),
+                ("remove", "Delete a configured workflow"),
+                ("validate", "Check workflows for errors"),
+            ]
+            for sub, desc in subcmds:
+                if sub.startswith(prefix):
+                    yield Completion(sub, start_position=-len(current_token), display=sub, display_meta=desc)
+            return
+
+        subcmd = tokens[1].lower()
+        if subcmd in ("show", "run", "remove", "delete") and len(tokens) == 2:
+            wfs = self.context.config.get_workflows()
+            for wf_name in sorted(wfs.keys()):
+                if wf_name.lower().startswith(prefix):
+                    desc = wfs[wf_name].get("description", "Workflow") if isinstance(wfs[wf_name], dict) else "Workflow"
+                    yield Completion(wf_name, start_position=-len(current_token), display=wf_name, display_meta=desc[:30])
+            return
+
+        if subcmd == "run" and len(tokens) >= 3:
+            if "--dry-run".startswith(prefix):
+                yield Completion("--dry-run", start_position=-len(current_token), display="--dry-run", display_meta="Preview workflow steps")
+
+    def _complete_diagnostics(self, tokens: list[str], current_token: str) -> Iterable[Completion]:
+        """Suggest options for diagnostics."""
+        prefix = current_token.lower()
+        if "--export".startswith(prefix):
+            yield Completion("--export", start_position=-len(current_token), display="--export", display_meta="Export sanitized report to Desktop")
 
     def _complete_paths(
         self, current_token: str, only_dirs: bool = False, include_shortcuts: bool = False

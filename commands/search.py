@@ -7,11 +7,12 @@ from typing import Any
 
 from rich.markup import escape
 
+from core.executor import CommandResult
 from core.registry import ArgumentRules, CommandInfo, CommandRegistry
 from services.file_service import format_bytes, search_files
 
 
-def handle_find(context: Any, args: list[str]) -> None:
+def handle_find(context: Any, args: list[str]) -> CommandResult:
     """Search for files in configured search directories."""
     console = context.console
     theme = context.theme
@@ -19,7 +20,7 @@ def handle_find(context: Any, args: list[str]) -> None:
 
     if not args:
         console.print(f"{theme.format_error('Usage:')} find <pattern_or_name> [--ext <extension>] [--limit <number>]")
-        return
+        return CommandResult.fail()
 
     # Parse arguments
     query_parts: list[str] = []
@@ -45,7 +46,7 @@ def handle_find(context: Any, args: list[str]) -> None:
     query = " ".join(query_parts).strip()
     if not query and not extension:
         console.print(f"{theme.format_error('Error:')} Please provide a search query or an extension.")
-        return
+        return CommandResult.fail()
 
     # Gather search roots from config
     raw_search_dirs = config.get("search_directories", ["~/Desktop", "~/Documents", "~/Downloads"])
@@ -74,13 +75,13 @@ def handle_find(context: Any, args: list[str]) -> None:
         )
     except KeyboardInterrupt:
         console.print(f"\n{theme.format_warning('Search cancelled by user.')}")
-        return
+        return CommandResult.cancel()
 
     if not matches:
         console.print(theme.format_muted(f"No matching files found for '{escape(query)}'."))
         if skipped_count > 0:
             console.print(theme.format_muted(f"{skipped_count} folder(s) skipped due to permission restrictions."))
-        return
+        return CommandResult.success()
 
     table = theme.create_table(
         title=f"Search Results ({len(matches)} matches)",
@@ -110,6 +111,7 @@ def handle_find(context: Any, args: list[str]) -> None:
     if skipped_count > 0:
         console.print(theme.format_muted(f"{skipped_count} folder(s) skipped due to permission restrictions."))
     console.print()
+    return CommandResult.success()
 
 
 def register_search_commands(registry: CommandRegistry) -> None:

@@ -206,3 +206,50 @@ def test_process_and_processes_completions(tmp_path: Path) -> None:
     assert "cpu" in sort_opts
     assert "memory" in sort_opts
     assert "name" in sort_opts
+
+
+def test_stage6_completions(tmp_path: Path) -> None:
+    """Test completion for organize, create-project, workflow, and diagnostics."""
+    context, completer = create_completer_context(tmp_path)
+    context.config.set_workflow("myflow", {"description": "test", "steps": ["github"]})
+
+    # 1. organize options
+    doc_org_flag = Document("organize --", 11)
+    org_flags = [c.text for c in completer.get_completions(doc_org_flag, CompleteEvent())]
+    assert "--dry-run" in org_flags
+    assert "--include-other" in org_flags
+
+    doc_org_undo = Document("organize un", 11)
+    org_sub = [c.text for c in completer.get_completions(doc_org_undo, CompleteEvent())]
+    assert "undo" in org_sub
+
+    # 2. create-project flags and templates
+    doc_cp = Document("create-project --", 17)
+    cp_flags = [c.text for c in completer.get_completions(doc_cp, CompleteEvent())]
+    assert "--template" in cp_flags
+    assert "--here" in cp_flags
+
+    doc_tmpl = Document("create-project myproj --template ", 33)
+    tmpl_opts = [c.text for c in completer.get_completions(doc_tmpl, CompleteEvent())]
+    assert "python" in tmpl_opts
+    assert "ml" in tmpl_opts
+    assert "fastapi" in tmpl_opts
+
+    # 3. workflow subcommands and workflow names
+    doc_wf = Document("workflow ", 9)
+    wf_subs = [c.text for c in completer.get_completions(doc_wf, CompleteEvent())]
+    assert "list" in wf_subs
+    assert "show" in wf_subs
+    assert "run" in wf_subs
+    assert "add" in wf_subs
+    assert "validate" in wf_subs
+
+    doc_wf_name = Document("workflow run ", 13)
+    wf_names = [c.text for c in completer.get_completions(doc_wf_name, CompleteEvent())]
+    assert "myflow" in wf_names
+
+    # 4. diagnostics --export flag
+    doc_diag = Document("diagnostics --", 14)
+    diag_flags = [c.text for c in completer.get_completions(doc_diag, CompleteEvent())]
+    assert "--export" in diag_flags
+

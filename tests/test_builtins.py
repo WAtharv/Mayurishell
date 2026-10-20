@@ -54,7 +54,8 @@ def test_builtin_help_unknown_command(tmp_path: Path) -> None:
     """Test 'help <unknown>' suggests close matches."""
     shell, console = create_test_shell(tmp_path)
     res = shell.run_command_line("help versio")
-    assert res is True
+    assert res is False
+    assert shell.executor.last_mood == "worried"
     output = console.export_text()
     assert "Command not found: 'versio'" in output
     assert "version" in output

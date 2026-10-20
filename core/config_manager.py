@@ -33,9 +33,9 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "whatsapp": "whatsapp:",
     },
     "websites": {
-        "youtube": "https://www.youtube.com",
-        "github": "https://www.github.com",
-        "google": "https://www.google.com",
+        "youtube": "https://www.youtube.com/results?search_query={query}",
+        "github": "https://github.com/search?q={query}",
+        "google": "https://www.google.com/search?q={query}",
         "chatgpt": "https://chatgpt.com",
     },
     "folder_shortcuts": {
@@ -52,6 +52,27 @@ DEFAULT_CONFIG: dict[str, Any] = {
     },
     "search_directories": ["~/Desktop", "~/Documents", "~/Downloads"],
     "excluded_directories": [".git", "node_modules", ".venv", "__pycache__", "AppData"],
+    "organize_categories": {
+        "Images": [".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".svg", ".ico", ".tiff"],
+        "Documents": [".pdf", ".docx", ".doc", ".txt", ".rtf", ".odt", ".md"],
+        "Spreadsheets": [".xlsx", ".xls", ".csv", ".ods"],
+        "Presentations": [".pptx", ".ppt", ".odp", ".key"],
+        "Videos": [".mp4", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".webm"],
+        "Audio": [".mp3", ".wav", ".flac", ".m4a", ".aac", ".ogg"],
+        "Archives": [".zip", ".rar", ".7z", ".tar", ".gz", ".bz2", ".xz", ".tar.gz", ".tar.bz2", ".tar.xz"],
+        "Code": [".py", ".js", ".ts", ".html", ".css", ".java", ".c", ".cpp", ".cs", ".go", ".rs", ".json", ".xml", ".yaml", ".yml", ".sql", ".sh", ".bat", ".ps1"],
+        "Installers": [".exe", ".msi", ".iso", ".dmg", ".pkg"],
+    },
+    "workflows": {
+        "web": {
+            "description": "Open default web services",
+            "steps": ["github", "youtube"],
+        },
+        "dev": {
+            "description": "Open development tools and projects",
+            "steps": ["code projects", "github"],
+        },
+    },
     "preferences": {
         "confirm_destructive": True,
         "show_welcome": True,
@@ -63,11 +84,30 @@ DEFAULT_CONFIG: dict[str, Any] = {
 }
 
 
+OLD_DEFAULT_WEBSITES: dict[str, set[str]] = {
+    "youtube": {"https://www.youtube.com", "https://youtube.com"},
+    "google": {"https://www.google.com", "https://google.com"},
+    "github": {"https://github.com", "https://www.github.com"},
+}
+
+NEW_WEBSITE_TEMPLATES: dict[str, str] = {
+    "youtube": "https://www.youtube.com/results?search_query={query}",
+    "google": "https://www.google.com/search?q={query}",
+    "github": "https://github.com/search?q={query}",
+}
+
+
 def deep_merge_defaults(target: dict[str, Any], defaults: dict[str, Any]) -> dict[str, Any]:
     """Recursively add missing keys from defaults into target without overwriting existing values."""
     for key, def_val in defaults.items():
         if key not in target:
             target[key] = copy.deepcopy(def_val)
+        elif key == "organize_categories":
+            # Requirement 7: Keep user edits; do not re-add categories or extensions the user removed
+            continue
+        elif key == "workflows":
+            # Keep user workflows; do not overwrite or force re-add
+            continue
         elif isinstance(target[key], dict) and isinstance(def_val, dict):
             deep_merge_defaults(target[key], def_val)
         elif isinstance(target[key], list) and not target[key] and def_val:
@@ -118,6 +158,35 @@ class ConfigManager:
         self.logs_dir.mkdir(parents=True, exist_ok=True)
         self.backups_dir.mkdir(parents=True, exist_ok=True)
 
+    def _upgrade_config(self, loaded: dict[str, Any]) -> bool:
+        """Upgrade old default website URLs and add missing default workflows.
+        
+        Never touches customized URLs or existing workflows.
+        Returns True if changes were made.
+        """
+        upgraded = False
+        websites = loaded.get("websites")
+        if isinstance(websites, dict):
+            for site_key, old_urls in OLD_DEFAULT_WEBSITES.items():
+                if site_key in websites:
+                    stored_url = websites[site_key]
+                    if stored_url in old_urls:
+                        websites[site_key] = NEW_WEBSITE_TEMPLATES[site_key]
+                        upgraded = True
+                        logger.info("Upgraded website shortcut '%s' to query template.", site_key)
+
+        workflows = loaded.get("workflows")
+        if not isinstance(workflows, dict):
+            loaded["workflows"] = copy.deepcopy(DEFAULT_CONFIG["workflows"])
+            upgraded = True
+        else:
+            if "dev" not in workflows:
+                workflows["dev"] = copy.deepcopy(DEFAULT_CONFIG["workflows"]["dev"])
+                upgraded = True
+                logger.info("Added missing default workflow 'dev'.")
+
+        return upgraded
+
     def load(self) -> dict[str, Any]:
         """Load configuration from disk. Recovers with defaults if missing or corrupted."""
         if not self.config_path.exists():
@@ -135,7 +204,10 @@ class ConfigManager:
             
             # Merge with default keys to ensure new config keys and shortcuts exist
             deep_merge_defaults(loaded, DEFAULT_CONFIG)
+            upgraded = self._upgrade_config(loaded)
             self.data = loaded
+            if upgraded:
+                self.save()
             logger.info("Successfully loaded configuration from %s", self.config_path)
             return self.data
 
@@ -232,6 +304,46 @@ class ConfigManager:
             key = name.lower()
             if key in self.data[section]:
                 del self.data[section][key]
+                self.save()
+                return True
+        return False
+
+    def get_organize_categories(self) -> dict[str, list[str]]:
+        """Return dict of configured organize categories and their extension lists."""
+        cats = self.data.get("organize_categories")
+        if isinstance(cats, dict):
+            return {
+                str(k): [str(ext).lower() for ext in v]
+                for k, v in cats.items()
+                if isinstance(v, list)
+            }
+        return copy.deepcopy(DEFAULT_CONFIG["organize_categories"])
+
+    def get_workflows(self) -> dict[str, Any]:
+        """Return dict of configured workflows."""
+        wfs = self.data.get("workflows")
+        if isinstance(wfs, dict):
+            return dict(wfs)
+        return copy.deepcopy(DEFAULT_CONFIG["workflows"])
+
+    def get_workflow(self, name: str) -> dict[str, Any] | None:
+        """Return a specific workflow dict if configured."""
+        wfs = self.get_workflows()
+        return wfs.get(name.lower())
+
+    def set_workflow(self, name: str, data: dict[str, Any]) -> None:
+        """Add or update a workflow definition and persist config."""
+        if "workflows" not in self.data or not isinstance(self.data["workflows"], dict):
+            self.data["workflows"] = {}
+        self.data["workflows"][name.lower()] = data
+        self.save()
+
+    def remove_workflow(self, name: str) -> bool:
+        """Remove a workflow definition and persist config."""
+        if "workflows" in self.data and isinstance(self.data["workflows"], dict):
+            key = name.lower()
+            if key in self.data["workflows"]:
+                del self.data["workflows"][key]
                 self.save()
                 return True
         return False

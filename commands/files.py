@@ -9,6 +9,7 @@ from typing import Any
 from rich.markup import escape
 from rich.table import Table
 
+from core.executor import CommandResult
 from core.registry import ArgumentRules, CommandInfo, CommandRegistry
 from services.file_service import (
     EXECUTABLE_EXTENSIONS,
@@ -41,7 +42,7 @@ def confirm_prompt(console: Any, prompt_msg: str, default_yes: bool = False, the
         return False
 
 
-def handle_open(context: Any, args: list[str]) -> None:
+def handle_open(context: Any, args: list[str]) -> CommandResult:
     """Open a file with its default application."""
     console = context.console
     theme = context.theme
@@ -50,7 +51,7 @@ def handle_open(context: Any, args: list[str]) -> None:
 
     if not target.exists():
         console.print(f"{theme.format_error('File not found:')} '{escape(str(target))}'")
-        return
+        return CommandResult.fail()
 
     if target.is_dir():
         cd_cmd = theme.format_primary(f"cd '{target.name}'", bold=True)
@@ -58,7 +59,7 @@ def handle_open(context: Any, args: list[str]) -> None:
             f"{theme.format_warning('Path is a directory.', bold=True)} "
             f"Use {cd_cmd} to navigate or its folder shortcut to open in Explorer."
         )
-        return
+        return CommandResult.fail()
 
     # Check for executable or script extensions
     ext = target.suffix.lower()
@@ -75,7 +76,7 @@ def handle_open(context: Any, args: list[str]) -> None:
         )
         if not confirmed:
             console.print(theme.format_muted("Execution cancelled by user."))
-            return
+            return CommandResult.cancel()
 
     try:
         if hasattr(os, "startfile"):
@@ -84,11 +85,13 @@ def handle_open(context: Any, args: list[str]) -> None:
             import webbrowser
             webbrowser.open(target.as_uri())
         console.print(f"{theme.format_success('Opened')} {theme.format_primary(escape(target.name), bold=True)}")
+        return CommandResult.success()
     except Exception as exc:
         console.print(f"{theme.format_error('Failed to open file:')} {escape(str(exc))}")
+        return CommandResult.fail()
 
 
-def handle_mkdir(context: Any, args: list[str]) -> None:
+def handle_mkdir(context: Any, args: list[str]) -> CommandResult:
     """Create a new directory."""
     console = context.console
     theme = context.theme
@@ -97,11 +100,13 @@ def handle_mkdir(context: Any, args: list[str]) -> None:
     try:
         create_directory(target)
         console.print(f"{theme.format_success('Created directory:')} {theme.format_primary(escape(str(target)), bold=True)}")
+        return CommandResult.success()
     except Exception as exc:
         console.print(f"{theme.format_error('Error creating directory:')} {escape(str(exc))}")
+        return CommandResult.fail()
 
 
-def handle_touch(context: Any, args: list[str]) -> None:
+def handle_touch(context: Any, args: list[str]) -> CommandResult:
     """Create an empty file or update its timestamp."""
     console = context.console
     theme = context.theme
@@ -110,11 +115,13 @@ def handle_touch(context: Any, args: list[str]) -> None:
     try:
         create_file(target)
         console.print(f"{theme.format_success('Created/updated file:')} {theme.format_primary(escape(str(target)), bold=True)}")
+        return CommandResult.success()
     except Exception as exc:
         console.print(f"{theme.format_error('Error touching file:')} {escape(str(exc))}")
+        return CommandResult.fail()
 
 
-def handle_copy(context: Any, args: list[str]) -> None:
+def handle_copy(context: Any, args: list[str]) -> CommandResult:
     """Copy a file or directory."""
     console = context.console
     theme = context.theme
@@ -123,14 +130,14 @@ def handle_copy(context: Any, args: list[str]) -> None:
 
     if len(clean_args) < 2:
         console.print(f"{theme.format_error('Usage:')} copy <source> <destination>")
-        return
+        return CommandResult.fail()
 
     src, _ = context.resolve_path(clean_args[0])
     dst, _ = context.resolve_path(clean_args[1])
 
     if not src.exists():
         console.print(f"{theme.format_error('Source not found:')} '{escape(str(src))}'")
-        return
+        return CommandResult.fail()
 
     # Check overwrite if dst exists
     check_target = dst / src.name if dst.is_dir() else dst
@@ -145,7 +152,7 @@ def handle_copy(context: Any, args: list[str]) -> None:
             )
             if not confirmed:
                 console.print(theme.format_muted("Copy cancelled."))
-                return
+                return CommandResult.cancel()
         overwrite = True
 
     try:
@@ -154,11 +161,13 @@ def handle_copy(context: Any, args: list[str]) -> None:
             f"{theme.format_success('Copied')} {theme.format_primary(escape(src.name), bold=True)} -> "
             f"{theme.format_primary(escape(str(result)), bold=True)}"
         )
+        return CommandResult.success()
     except Exception as exc:
         console.print(f"{theme.format_error('Copy failed:')} {escape(str(exc))}")
+        return CommandResult.fail()
 
 
-def handle_move(context: Any, args: list[str]) -> None:
+def handle_move(context: Any, args: list[str]) -> CommandResult:
     """Move a file or directory."""
     console = context.console
     theme = context.theme
@@ -167,14 +176,14 @@ def handle_move(context: Any, args: list[str]) -> None:
 
     if len(clean_args) < 2:
         console.print(f"{theme.format_error('Usage:')} move <source> <destination>")
-        return
+        return CommandResult.fail()
 
     src, _ = context.resolve_path(clean_args[0])
     dst, _ = context.resolve_path(clean_args[1])
 
     if not src.exists():
         console.print(f"{theme.format_error('Source not found:')} '{escape(str(src))}'")
-        return
+        return CommandResult.fail()
 
     check_target = dst / src.name if dst.is_dir() else dst
     overwrite = False
@@ -188,7 +197,7 @@ def handle_move(context: Any, args: list[str]) -> None:
             )
             if not confirmed:
                 console.print(theme.format_muted("Move cancelled."))
-                return
+                return CommandResult.cancel()
         overwrite = True
 
     try:
@@ -197,11 +206,13 @@ def handle_move(context: Any, args: list[str]) -> None:
             f"{theme.format_success('Moved')} {theme.format_primary(escape(src.name), bold=True)} -> "
             f"{theme.format_primary(escape(str(result)), bold=True)}"
         )
+        return CommandResult.success()
     except Exception as exc:
         console.print(f"{theme.format_error('Move failed:')} {escape(str(exc))}")
+        return CommandResult.fail()
 
 
-def handle_rename(context: Any, args: list[str]) -> None:
+def handle_rename(context: Any, args: list[str]) -> CommandResult:
     """Rename a file or folder in place."""
     console = context.console
     theme = context.theme
@@ -210,7 +221,7 @@ def handle_rename(context: Any, args: list[str]) -> None:
 
     if len(clean_args) < 2:
         console.print(f"{theme.format_error('Usage:')} rename <target> <new_name>")
-        return
+        return CommandResult.fail()
 
     src, _ = context.resolve_path(clean_args[0])
     new_name = clean_args[1]
@@ -221,11 +232,11 @@ def handle_rename(context: Any, args: list[str]) -> None:
             f"{theme.format_error('Error:')} New name must be a plain filename with no path separators. "
             f"Use 'move' to relocate items."
         )
-        return
+        return CommandResult.fail()
 
     if not src.exists():
         console.print(f"{theme.format_error('Target not found:')} '{escape(str(src))}'")
-        return
+        return CommandResult.fail()
 
     target_dst = src.parent / new_name
     overwrite = False
@@ -239,7 +250,7 @@ def handle_rename(context: Any, args: list[str]) -> None:
             )
             if not confirmed:
                 console.print(theme.format_muted("Rename cancelled."))
-                return
+                return CommandResult.cancel()
         overwrite = True
 
     try:
@@ -248,11 +259,13 @@ def handle_rename(context: Any, args: list[str]) -> None:
             f"{theme.format_success('Renamed')} {theme.format_primary(escape(src.name), bold=True)} -> "
             f"{theme.format_primary(escape(result.name), bold=True)}"
         )
+        return CommandResult.success()
     except Exception as exc:
         console.print(f"{theme.format_error('Rename failed:')} {escape(str(exc))}")
+        return CommandResult.fail()
 
 
-def handle_delete(context: Any, args: list[str]) -> None:
+def handle_delete(context: Any, args: list[str]) -> CommandResult:
     """Safely delete a file or directory by sending to the Recycle Bin.
     
     Refuses protected paths. Requires -r for directories. Default confirmation is No.
@@ -265,22 +278,22 @@ def handle_delete(context: Any, args: list[str]) -> None:
 
     if not targets:
         console.print(f"{theme.format_error('Usage:')} delete [-r] <target>")
-        return
+        return CommandResult.fail()
 
     # Check for wildcards
     if len(targets) > 1:
         console.print(f"{theme.format_error('Error:')} Delete accepts only one explicit target at a time. No bulk/multiple deletion.")
-        return
+        return CommandResult.fail()
 
     raw_target = targets[0]
     if any(ch in raw_target for ch in ("*", "?")):
         console.print(f"{theme.format_error('Error:')} Wildcards are not allowed in delete. Specify an exact file or folder.")
-        return
+        return CommandResult.fail()
 
     target_path, _ = context.resolve_path(raw_target)
     if not target_path.exists():
         console.print(f"{theme.format_error('Target not found:')} '{escape(str(target_path))}'")
-        return
+        return CommandResult.fail()
 
     # Check protected path constraints
     project_root = Path(__file__).parent.parent.resolve()
@@ -296,7 +309,7 @@ def handle_delete(context: Any, args: list[str]) -> None:
     )
     if is_prot:
         console.print(f"{theme.format_error('Deletion refused:')} {escape(reason)}")
-        return
+        return CommandResult.fail()
 
     # Directory requires -r
     if target_path.is_dir() and not recursive:
@@ -304,7 +317,7 @@ def handle_delete(context: Any, args: list[str]) -> None:
             f"{theme.format_error('Error:')} '{escape(target_path.name)}' is a directory. "
             f"Use {theme.format_primary('delete -r <directory>', bold=True)} to delete."
         )
-        return
+        return CommandResult.fail()
 
     # Check network / removable drive warning
     if is_network_or_removable(target_path):
@@ -323,16 +336,18 @@ def handle_delete(context: Any, args: list[str]) -> None:
         confirmed = confirm_prompt(console, msg, default_yes=False, theme=theme)
         if not confirmed:
             console.print(theme.format_muted("Deletion cancelled."))
-            return
+            return CommandResult.cancel()
 
     try:
         recycle_path(target_path, recursive=recursive)
         console.print(f"{theme.format_success('Sent to Recycle Bin:')} {theme.format_primary(escape(target_path.name), bold=True)}")
+        return CommandResult.success()
     except Exception as exc:
         console.print(f"{theme.format_error('Delete failed:')} {escape(str(exc))}")
+        return CommandResult.fail()
 
 
-def handle_info(context: Any, args: list[str]) -> None:
+def handle_info(context: Any, args: list[str]) -> CommandResult:
     """Display comprehensive information about a file or directory."""
     console = context.console
     theme = context.theme
@@ -343,7 +358,7 @@ def handle_info(context: Any, args: list[str]) -> None:
         data = get_path_info(target)
     except Exception as exc:
         console.print(f"{theme.format_error('Error:')} {escape(str(exc))}")
-        return
+        return CommandResult.fail()
 
     grid = Table.grid(padding=(0, 2))
     grid.add_column(style=theme.bold_accent_style, justify="right")
@@ -357,6 +372,7 @@ def handle_info(context: Any, args: list[str]) -> None:
     grid.add_row("Modified:", escape(str(data["modified"])))
 
     console.print(theme.create_panel(grid, title=f"Item Info: {escape(str(data['name']))}"))
+    return CommandResult.success()
 
 
 def register_file_commands(registry: CommandRegistry) -> None:

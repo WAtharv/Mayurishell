@@ -7,6 +7,7 @@ from rich.markup import escape
 from rich.table import Table
 
 from commands.files import confirm_prompt
+from core.executor import CommandResult
 from core.registry import ArgumentRules, CommandInfo, CommandRegistry
 from services.system_service import (
     find_processes,
@@ -35,7 +36,7 @@ def parse_pid(raw_pid: str) -> tuple[int | None, str]:
     return pid, ""
 
 
-def handle_processes(context: Any, args: list[str]) -> None:
+def handle_processes(context: Any, args: list[str]) -> CommandResult:
     """List running processes with CPU % and Working Set memory.
     
     Usage: processes [--sort cpu|memory|name] [--limit N]
@@ -54,7 +55,7 @@ def handle_processes(context: Any, args: list[str]) -> None:
                 sort_by = sort_val
             else:
                 console.print(f"{theme.format_error('Invalid sort option:')} '{escape(args[i + 1])}'. Choose from: cpu, memory, name.")
-                return
+                return CommandResult.fail()
             i += 2
         elif arg.startswith("--sort="):
             sort_val = arg.split("=", 1)[1].lower()
@@ -62,7 +63,7 @@ def handle_processes(context: Any, args: list[str]) -> None:
                 sort_by = sort_val
             else:
                 console.print(f"{theme.format_error('Invalid sort option:')} '{escape(sort_val)}'. Choose from: cpu, memory, name.")
-                return
+                return CommandResult.fail()
             i += 1
         elif arg in ("--limit", "-l", "-n") and i + 1 < len(args):
             try:
@@ -71,7 +72,7 @@ def handle_processes(context: Any, args: list[str]) -> None:
                     raise ValueError
             except ValueError:
                 console.print(f"{theme.format_error('Invalid limit:')} '{escape(args[i + 1])}'. Must be a positive integer.")
-                return
+                return CommandResult.fail()
             i += 2
         elif arg.startswith("--limit="):
             try:
@@ -80,7 +81,7 @@ def handle_processes(context: Any, args: list[str]) -> None:
                     raise ValueError
             except ValueError:
                 console.print(f"{theme.format_error('Invalid limit value.')} Must be a positive integer.")
-                return
+                return CommandResult.fail()
             i += 1
         else:
             i += 1
@@ -109,22 +110,23 @@ def handle_processes(context: Any, args: list[str]) -> None:
         )
 
     console.print(table)
+    return CommandResult.success()
 
 
-def handle_process_find(context: Any, args: list[str]) -> None:
+def handle_process_find(context: Any, args: list[str]) -> CommandResult:
     """Search for running processes by partial, case-insensitive name match."""
     console = context.console
     theme = context.theme
     if not args:
         console.print(f"{theme.format_error('Usage:')} process find <name>")
-        return
+        return CommandResult.fail()
 
     query = args[0].strip()
     matches = find_processes(query)
 
     if not matches:
         console.print(theme.format_muted(f"No running processes found matching '{escape(query)}'."))
-        return
+        return CommandResult.success()
 
     table = theme.create_table(
         title=f"Processes Matching '{escape(query)}' ({len(matches)} found)",
@@ -143,25 +145,26 @@ def handle_process_find(context: Any, args: list[str]) -> None:
         )
 
     console.print(table)
+    return CommandResult.success()
 
 
-def handle_process_info(context: Any, args: list[str]) -> None:
+def handle_process_info(context: Any, args: list[str]) -> CommandResult:
     """Inspect a single process by PID without exposing cmdline or environment variables."""
     console = context.console
     theme = context.theme
     if not args:
         console.print(f"{theme.format_error('Usage:')} process info <pid>")
-        return
+        return CommandResult.fail()
 
     pid, err = parse_pid(args[0])
     if err:
         console.print(f"{theme.format_error('Error:')} {escape(err)}")
-        return
+        return CommandResult.fail()
 
     info = get_process_detail(pid)
     if not info:
         console.print(f"{theme.format_error('Error:')} Process with PID {pid} was not found (it may have exited).")
-        return
+        return CommandResult.fail()
 
     grid = Table.grid(padding=(0, 2))
     grid.add_column("Field", style=theme.bold_primary_style, justify="right")
@@ -181,9 +184,10 @@ def handle_process_info(context: Any, args: list[str]) -> None:
 
     panel = theme.create_panel(grid, title=f"Process Details: {escape(info.get('name', ''))} (PID {pid})", expand=False)
     console.print(panel)
+    return CommandResult.success()
 
 
-def handle_process_kill(context: Any, args: list[str]) -> None:
+def handle_process_kill(context: Any, args: list[str]) -> CommandResult:
     """Safely terminate or kill a process by PID with confirmation and protection guards."""
     console = context.console
     theme = context.theme
@@ -192,29 +196,29 @@ def handle_process_kill(context: Any, args: list[str]) -> None:
 
     if not clean_args:
         console.print(f"{theme.format_error('Usage:')} process kill <pid> [--force]")
-        return
+        return CommandResult.fail()
 
     if len(clean_args) > 1:
         console.print(f"{theme.format_error('Error:')} Process kill accepts only one PID at a time. No multiple or wildcard kills.")
-        return
+        return CommandResult.fail()
 
     raw_pid = clean_args[0]
     pid, err = parse_pid(raw_pid)
     if err:
         console.print(f"{theme.format_error('Error:')} {escape(err)}")
-        return
+        return CommandResult.fail()
 
     # Check protected status first
     is_prot, reason = is_protected_process(pid)
     if is_prot:
         console.print(f"{theme.format_error('Action Refused:')} {escape(reason)}")
-        return
+        return CommandResult.fail()
 
     # Fetch metadata for confirmation
     detail = get_process_detail(pid)
     if not detail:
         console.print(f"{theme.format_error('Error:')} Process with PID {pid} not found (may have already exited).")
-        return
+        return CommandResult.fail()
 
     pname = detail.get("name", f"PID {pid}")
     create_time = detail.get("create_time", 0.0)
@@ -231,7 +235,7 @@ def handle_process_kill(context: Any, args: list[str]) -> None:
     confirmed = confirm_prompt(console, msg, default_yes=False, theme=theme)
     if not confirmed:
         console.print(theme.format_muted("Process termination cancelled by user."))
-        return
+        return CommandResult.cancel()
 
     # Execute guarded kill with PID recycling check
     success, res_msg = kill_process_guarded(
@@ -243,11 +247,13 @@ def handle_process_kill(context: Any, args: list[str]) -> None:
 
     if success:
         console.print(f"{theme.format_success('Success:', bold=True)} {escape(res_msg)}")
+        return CommandResult.success()
     else:
         console.print(f"{theme.format_error('Failed:', bold=True)} {escape(res_msg)}")
+        return CommandResult.fail()
 
 
-def handle_process_dispatcher(context: Any, args: list[str]) -> None:
+def handle_process_dispatcher(context: Any, args: list[str]) -> CommandResult:
     """Dispatcher command routing 'process find', 'process info', 'process kill', and 'process list'."""
     console = context.console
     theme = context.theme
@@ -260,25 +266,26 @@ def handle_process_dispatcher(context: Any, args: list[str]) -> None:
             f"  {theme.format_text('process info <pid>', bold=True)}                            - Display details for a PID\n"
             f"  {theme.format_text('process kill <pid> [--force]', bold=True)}                  - Terminate process by PID\n"
         )
-        return
+        return CommandResult.success()
 
     subcmd = args[0].lower()
     sub_args = args[1:]
 
     if subcmd == "find":
-        handle_process_find(context, sub_args)
+        return handle_process_find(context, sub_args)
     elif subcmd == "info":
-        handle_process_info(context, sub_args)
+        return handle_process_info(context, sub_args)
     elif subcmd == "kill":
-        handle_process_kill(context, sub_args)
+        return handle_process_kill(context, sub_args)
     elif subcmd in ("list", "ls"):
-        handle_processes(context, sub_args)
+        return handle_processes(context, sub_args)
     else:
         err_msg = theme.format_error(f"Unknown process subcommand '{escape(subcmd)}'.")
         console.print(
             f"{err_msg} "
             f"Valid subcommands: find, info, kill, list."
         )
+        return CommandResult.fail()
 
 
 def register_process_commands(registry: CommandRegistry) -> None:

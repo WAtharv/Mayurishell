@@ -178,11 +178,22 @@ def resolve_path(
             note = f"Resolved to local path '{local_candidate.name}' (precedence over shortcut '{stripped.lower()}')."
         return local_candidate, note
 
-    # 2. Folder shortcut match
-    if folder_shortcuts and stripped.lower() in folder_shortcuts:
-        shortcut_raw = folder_shortcuts[stripped.lower()]
-        expanded = Path(os.path.expanduser(os.path.expandvars(shortcut_raw))).resolve()
-        return expanded, f"Resolved folder shortcut '{stripped.lower()}' -> {expanded}"
+    # 2. Folder shortcut match (exact or prefix like projects\my-app)
+    if folder_shortcuts:
+        if stripped.lower() in folder_shortcuts:
+            shortcut_raw = folder_shortcuts[stripped.lower()]
+            expanded = Path(os.path.expanduser(os.path.expandvars(shortcut_raw))).resolve()
+            return expanded, f"Resolved folder shortcut '{stripped.lower()}' -> {expanded}"
+
+        # Prefix match: check first path component
+        first_part, sep, rest = stripped.partition("\\")
+        if not sep:
+            first_part, sep, rest = stripped.partition("/")
+        if sep and first_part.lower() in folder_shortcuts:
+            shortcut_raw = folder_shortcuts[first_part.lower()]
+            base_dir = Path(os.path.expanduser(os.path.expandvars(shortcut_raw))).resolve()
+            expanded_sub = (base_dir / rest).resolve()
+            return expanded_sub, f"Resolved folder shortcut prefix '{first_part.lower()}' -> {expanded_sub}"
 
     # 3. Standard path expansion (~, %ENVVARS%, relative to current_dir)
     expanded_str = os.path.expanduser(os.path.expandvars(stripped))
@@ -192,6 +203,38 @@ def resolve_path(
         return candidate.resolve(), None
 
     return (current_dir / candidate).resolve(), None
+
+
+def validate_app_path_argument(
+    raw_arg: str,
+    context: Any,
+) -> tuple[bool, Path | None, str]:
+    """Validate an argument destined for an application launcher or workflow app step.
+    
+    Rules:
+      - App arguments must be existing paths only.
+      - Refuse any argument that starts with '-' or '/' unless it resolves to an existing path.
+      - Resolves relative paths against context.current_dir, expands ~ and folder shortcuts.
+      - Returns (is_valid, resolved_absolute_path_or_None, error_message_or_info)
+    """
+    stripped = raw_arg.strip()
+    if not stripped:
+        return False, None, "Path argument cannot be empty."
+
+    resolved_path, _ = context.resolve_path(stripped)
+    resolved_exists = resolved_path.exists()
+
+    # Refuse options/flags starting with '-' or '/' unless resolving to an existing path
+    if stripped.startswith(("-", "/")):
+        if not resolved_exists:
+            return False, None, f"Argument '{stripped}' starts with '-' or '/' and does not resolve to an existing path."
+
+    if not resolved_exists:
+        if stripped.lower() == "projects":
+            return False, resolved_path, "Folder 'projects' not found. Run: add-folder projects <path>"
+        return False, resolved_path, f"Path does not exist: '{resolved_path}'"
+
+    return True, resolved_path.resolve(), ""
 
 
 def list_directory(

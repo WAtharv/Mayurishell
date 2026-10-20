@@ -8,18 +8,20 @@ from typing import Any
 from rich.markup import escape
 
 from commands.applications import check_shortcut_collision
+from core.executor import CommandResult
 from core.registry import ArgumentRules, CommandInfo, CommandRegistry
 from services.file_service import list_directory
 from services.launcher_service import launch_folder
 
 
-def handle_pwd(context: Any, args: list[str]) -> None:
+def handle_pwd(context: Any, args: list[str]) -> CommandResult:
     """Print the current working directory."""
     theme = context.theme
     context.console.print(theme.format_primary(escape(str(context.current_dir)), bold=True))
+    return CommandResult.success()
 
 
-def handle_cd(context: Any, args: list[str]) -> None:
+def handle_cd(context: Any, args: list[str]) -> CommandResult:
     r"""Change the shell's current working directory.
     
     Accepts relative paths, '..', drive letters (D:\), '~', and folder shortcuts.
@@ -35,13 +37,14 @@ def handle_cd(context: Any, args: list[str]) -> None:
 
     if not target_path.exists():
         console.print(f"{theme.format_error('Directory not found:')} '{escape(str(target_path))}'")
-        return
+        return CommandResult.fail()
 
     if not target_path.is_dir():
         console.print(f"{theme.format_error('Not a directory:')} '{escape(str(target_path))}'")
-        return
+        return CommandResult.fail()
 
     context.current_dir = target_path.resolve()
+    return CommandResult.success()
 
 
 def handle_ls(context: Any, args: list[str]) -> None:
@@ -84,7 +87,7 @@ def handle_ls(context: Any, args: list[str]) -> None:
         items = list_directory(target_dir, pattern=pattern, show_hidden=show_hidden)
     except Exception as exc:
         console.print(f"{theme.format_error('Error listing directory:')} {escape(str(exc))}")
-        return
+        return CommandResult.fail()
 
     table = theme.create_table(
         title=f"Directory: {escape(str(target_dir))}",
@@ -120,11 +123,12 @@ def handle_ls(context: Any, args: list[str]) -> None:
 
     console.print(table)
     console.print(f"{theme.format_muted(f'{dir_count} directories, {file_count} files')}\n")
+    return CommandResult.success()
 
 
 def create_folder_launcher_handler(folder_name: str, raw_path: str):
     """Factory to create a command handler for opening a folder shortcut in File Explorer."""
-    def handler(context: Any, args: list[str]) -> None:
+    def handler(context: Any, args: list[str]) -> CommandResult:
         console = context.console
         theme = context.theme
         current_path = context.config.get_folder_shortcuts().get(folder_name.lower(), raw_path)
@@ -135,6 +139,7 @@ def create_folder_launcher_handler(folder_name: str, raw_path: str):
                 f"{theme.format_primary(escape(folder_name), bold=True)} "
                 f"({theme.format_muted(escape(str(expanded_path)))})"
             )
+            return CommandResult.success()
         else:
             err_prefix = theme.format_error(f"Folder error for '{escape(folder_name)}':")
             console.print(f"{err_prefix} {escape(msg)}")
@@ -142,10 +147,11 @@ def create_folder_launcher_handler(folder_name: str, raw_path: str):
                 f"  Update this shortcut to an existing directory using: "
                 f"{theme.format_primary(f'add-folder {folder_name} <path>', bold=True)}"
             )
+            return CommandResult.fail()
     return handler
 
 
-def handle_add_folder(context: Any, args: list[str]) -> None:
+def handle_add_folder(context: Any, args: list[str]) -> CommandResult:
     """Add or update a folder shortcut."""
     console = context.console
     theme = context.theme
@@ -156,7 +162,7 @@ def handle_add_folder(context: Any, args: list[str]) -> None:
     err = check_shortcut_collision(name, "folder_shortcuts", context)
     if err:
         console.print(f"{theme.format_error('Error:')} {escape(err)}")
-        return
+        return CommandResult.fail()
 
     # Path expansion and check
     expanded = Path(os.path.expanduser(os.path.expandvars(raw_path))).resolve()
@@ -183,6 +189,7 @@ def handle_add_folder(context: Any, args: list[str]) -> None:
         f"{theme.format_success('set to')} "
         f"'{theme.format_warning(escape(raw_path))}'."
     )
+    return CommandResult.success()
 
 
 def register_navigation_commands(registry: CommandRegistry, config: Any) -> None:

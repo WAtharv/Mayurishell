@@ -8,26 +8,26 @@ from rich.table import Table
 
 from commands.applications import check_shortcut_collision
 from core.exceptions import AliasConflictError, AliasLoopError
+from core.executor import CommandResult
 from core.registry import ArgumentRules, CommandInfo, CommandRegistry
 
 
 def create_alias_launcher_handler(alias_name: str, target: str):
     """Factory to create a command handler for an alias shortcut."""
-    def handler(context: Any, args: list[str]) -> None:
+    def handler(context: Any, args: list[str]) -> CommandResult:
         # Alias is resolved and executed through the shell's alias resolver
-        pass
+        return CommandResult.success()
     return handler
 
 
-def handle_alias(context: Any, args: list[str]) -> None:
+def handle_alias(context: Any, args: list[str]) -> CommandResult:
     """Create a new command alias or list existing aliases."""
     console = context.console
     theme = context.theme
     alias_mgr = context.alias_manager
 
     if not args:
-        handle_aliases(context, [])
-        return
+        return handle_aliases(context, [])
 
     name = args[0].strip().lower()
     if len(args) == 1:
@@ -35,9 +35,10 @@ def handle_alias(context: Any, args: list[str]) -> None:
         target = alias_mgr.get(name)
         if target:
             console.print(f"{theme.format_primary(escape(name), bold=True)} -> '{theme.format_warning(escape(target))}'")
+            return CommandResult.success()
         else:
             console.print(f"{theme.format_error('Alias not found:')} '{escape(name)}'")
-        return
+            return CommandResult.fail()
 
     # Target is the rest of the arguments joined
     target_cmd = " ".join(args[1:]).strip()
@@ -46,7 +47,7 @@ def handle_alias(context: Any, args: list[str]) -> None:
     err = check_shortcut_collision(name, "aliases", context)
     if err:
         console.print(f"{theme.format_error('Error:')} {escape(err)}")
-        return
+        return CommandResult.fail()
 
     try:
         alias_mgr.add_alias(name, target_cmd, registry=context.registry)
@@ -66,11 +67,13 @@ def handle_alias(context: Any, args: list[str]) -> None:
             f"'{theme.format_primary(escape(name), bold=True)}' -> "
             f"'{theme.format_warning(escape(target_cmd))}'"
         )
+        return CommandResult.success()
     except (AliasLoopError, AliasConflictError, ValueError) as exc:
         console.print(f"{theme.format_error('Failed to create alias:')} {escape(str(exc))}")
+        return CommandResult.fail()
 
 
-def handle_aliases(context: Any, args: list[str]) -> None:
+def handle_aliases(context: Any, args: list[str]) -> CommandResult:
     """List all configured command aliases."""
     console = context.console
     theme = context.theme
@@ -78,7 +81,7 @@ def handle_aliases(context: Any, args: list[str]) -> None:
 
     if not aliases:
         console.print(theme.format_muted("No aliases configured."))
-        return
+        return CommandResult.success()
 
     table = theme.create_table(
         title="Configured Aliases",
@@ -97,9 +100,10 @@ def handle_aliases(context: Any, args: list[str]) -> None:
         f"{theme.format_primary('unalias <name>', bold=True)}"
         f"{theme.format_muted('.')}\n"
     )
+    return CommandResult.success()
 
 
-def handle_unalias(context: Any, args: list[str]) -> None:
+def handle_unalias(context: Any, args: list[str]) -> CommandResult:
     """Remove a configured alias."""
     console = context.console
     theme = context.theme
@@ -109,11 +113,13 @@ def handle_unalias(context: Any, args: list[str]) -> None:
     if alias_mgr.remove_alias(name):
         context.registry.unregister(name)
         console.print(f"{theme.format_success('Alias')} '{theme.format_primary(escape(name), bold=True)}' {theme.format_success('removed.')}")
+        return CommandResult.success()
     else:
         console.print(f"{theme.format_error('Alias not found:')} '{escape(name)}'")
+        return CommandResult.fail()
 
 
-def handle_commands(context: Any, args: list[str]) -> None:
+def handle_commands(context: Any, args: list[str]) -> CommandResult:
     """List all available commands and shortcuts."""
     registry: CommandRegistry = context.registry
     console = context.console
@@ -124,7 +130,7 @@ def handle_commands(context: Any, args: list[str]) -> None:
     )
     table.add_column("Category", style=theme.success_style, no_wrap=True)
     table.add_column("Command", style=theme.bold_primary_style, no_wrap=True)
-    table.add_column("Description", style=theme.text_style)
+    table.add_column("Description", style=theme.text_style, overflow="fold")
 
     all_cmds = registry.list_commands()
     for cmd in all_cmds:
@@ -136,9 +142,10 @@ def handle_commands(context: Any, args: list[str]) -> None:
         f"{theme.format_primary('command-info <name>', bold=True)}"
         f"{theme.format_muted(' for details.')}\n"
     )
+    return CommandResult.success()
 
 
-def handle_command_info(context: Any, args: list[str]) -> None:
+def handle_command_info(context: Any, args: list[str]) -> CommandResult:
     """Display comprehensive information about a command, shortcut, or alias."""
     registry: CommandRegistry = context.registry
     console = context.console
@@ -152,7 +159,7 @@ def handle_command_info(context: Any, args: list[str]) -> None:
         if suggestions:
             sugg_str = ", ".join(theme.format_primary(s, bold=True) for s in suggestions)
             console.print(f"  Did you mean: {sugg_str}?")
-        return
+        return CommandResult.fail()
 
     grid = Table.grid(padding=(0, 2))
     grid.add_column(style=theme.bold_accent_style, justify="right")
@@ -182,9 +189,10 @@ def handle_command_info(context: Any, args: list[str]) -> None:
             grid.add_row("Alias Target:", theme.format_muted(escape(target)))
 
     console.print(theme.create_panel(grid, title=f"Command Details: {escape(cmd.name)}"))
+    return CommandResult.success()
 
 
-def handle_config(context: Any, args: list[str]) -> None:
+def handle_config(context: Any, args: list[str]) -> CommandResult:
     """Display configuration file and folder locations."""
     console = context.console
     theme = context.theme
@@ -200,6 +208,7 @@ def handle_config(context: Any, args: list[str]) -> None:
     grid.add_row("Backups Directory:", theme.format_primary(escape(str(config.backups_dir))))
 
     console.print(theme.create_panel(grid, title="MayuriShell - Configuration Locations"))
+    return CommandResult.success()
 
 
 def register_customization_commands(registry: CommandRegistry, config: Any) -> None:

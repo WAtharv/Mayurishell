@@ -42,3 +42,13 @@ class AliasConflictError(MayuriShellError):
     """Raised when an alias conflicts with a registered command."""
     pass
 
+
+class CommandError(MayuriShellError):
+    """Raised when a command encounters an error or refusal."""
+    pass
+
+
+class CommandCancelled(MayuriShellError):
+    """Raised when a command operation is cancelled by the user."""
+    pass
+
