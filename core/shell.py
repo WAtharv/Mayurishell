@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 import platform
 from typing import Iterable
 
@@ -34,35 +35,26 @@ class ShellContext:
         history_manager: HistoryManager,
         alias_manager: AliasManager | None = None,
         console: Console | None = None,
+        current_dir: Path | None = None,
     ) -> None:
         self.config = config
         self.registry = registry
         self.history_manager = history_manager
         self.alias_manager = alias_manager if alias_manager is not None else AliasManager(config)
         self.console = console if console is not None else Console()
+        self.current_dir = (current_dir if current_dir is not None else Path.cwd()).resolve()
         self.running: bool = True
 
+    def resolve_path(self, raw: str) -> tuple[Path, str | None]:
+        """Resolve a raw path relative to current working directory and shortcuts."""
+        from services.file_service import resolve_path
+        return resolve_path(raw, self.current_dir, self.config.get_folder_shortcuts())
 
-class DynamicCommandCompleter(Completer):
-    """Dynamic auto-completer for prompt_toolkit that reads from CommandRegistry."""
 
-    def __init__(self, registry: CommandRegistry) -> None:
-        self.registry = registry
+from core.completer import MayuriCompleter
 
-    def get_completions(
-        self, document: Document, complete_event: CompleteEvent
-    ) -> Iterable[Completion]:
-        text_before_cursor = document.text_before_cursor.lstrip()
-        # Only autocomplete the command name (the first word)
-        if " " not in text_before_cursor:
-            word = text_before_cursor.lower()
-            for cmd in self.registry.list_commands():
-                if cmd.name.lower().startswith(word):
-                    yield Completion(
-                        cmd.name,
-                        start_position=-len(word),
-                        display_meta=cmd.description[:40],
-                    )
+# Alias for backwards compatibility
+DynamicCommandCompleter = MayuriCompleter
 
 
 class MayuriShell:
@@ -75,6 +67,7 @@ class MayuriShell:
         history_manager: HistoryManager,
         alias_manager: AliasManager | None = None,
         console: Console | None = None,
+        current_dir: Path | None = None,
     ) -> None:
         self.console = console if console is not None else Console()
         self.alias_manager = alias_manager if alias_manager is not None else AliasManager(config)
@@ -84,22 +77,28 @@ class MayuriShell:
             history_manager=history_manager,
             alias_manager=self.alias_manager,
             console=self.console,
+            current_dir=current_dir,
         )
         self.executor = CommandExecutor(registry=registry, console=self.console)
         
         # Configure prompt_toolkit session
+        from prompt_toolkit.shortcuts import CompleteStyle
         pt_history = PromptToolkitHistory(history_manager)
-        completer = DynamicCommandCompleter(registry)
+        completer = MayuriCompleter(self.context)
         try:
             self.session: PromptSession = PromptSession(
                 history=pt_history,
                 completer=completer,
+                complete_while_typing=False,
+                complete_style=CompleteStyle.MULTI_COLUMN,
             )
         except Exception:
             from prompt_toolkit.output import DummyOutput
             self.session = PromptSession(
                 history=pt_history,
                 completer=completer,
+                complete_while_typing=False,
+                complete_style=CompleteStyle.MULTI_COLUMN,
                 output=DummyOutput(),
             )
 
@@ -120,7 +119,23 @@ class MayuriShell:
         """Construct the prompt string with prompt_toolkit HTML formatting."""
         username = self.context.config.get("username", "Mayuri").lower()
         hostname = (platform.node() or "pc").lower()
-        return HTML(f"<ansibrightmagenta>{username}@{hostname}</ansibrightmagenta> <ansicyan>&gt;</ansicyan> ")
+        
+        show_cwd = self.context.config.get("preferences", {}).get("show_cwd_in_prompt", True)
+        cwd_segment = ""
+        if show_cwd:
+            cur = self.context.current_dir
+            home = Path.home().resolve()
+            if cur == home:
+                short_path = "~"
+            else:
+                try:
+                    rel = cur.relative_to(home)
+                    short_path = f"~/{rel.as_posix()}"
+                except ValueError:
+                    short_path = cur.as_posix()
+            cwd_segment = f" <ansiyellow>{short_path}</ansiyellow>"
+
+        return HTML(f"<ansibrightmagenta>{username}@{hostname}</ansibrightmagenta>{cwd_segment} <ansicyan>&gt;</ansicyan> ")
 
     def run_command_line(self, line: str) -> bool:
         """Parse and execute a single command line.

@@ -45,11 +45,12 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "gh": "github",
         "dl": "downloads",
     },
-    "search_directories": [],
-    "excluded_directories": [".git", "node_modules", ".venv", "__pycache__"],
+    "search_directories": ["~/Desktop", "~/Documents", "~/Downloads"],
+    "excluded_directories": [".git", "node_modules", ".venv", "__pycache__", "AppData"],
     "preferences": {
         "confirm_destructive": True,
         "show_welcome": True,
+        "show_cwd_in_prompt": True,
     },
 }
 
@@ -61,6 +62,8 @@ def deep_merge_defaults(target: dict[str, Any], defaults: dict[str, Any]) -> dic
             target[key] = copy.deepcopy(def_val)
         elif isinstance(target[key], dict) and isinstance(def_val, dict):
             deep_merge_defaults(target[key], def_val)
+        elif isinstance(target[key], list) and not target[key] and def_val:
+            target[key] = copy.deepcopy(def_val)
     return target
 
 

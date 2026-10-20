@@ -6,7 +6,9 @@ import sys
 from commands.applications import register_application_commands
 from commands.builtins import register_builtin_commands
 from commands.customization import register_customization_commands
+from commands.files import register_file_commands
 from commands.navigation import register_navigation_commands
+from commands.search import register_search_commands
 from commands.websites import register_website_commands
 from core.aliases import AliasManager
 from core.config_manager import ConfigManager
@@ -36,6 +38,8 @@ def main() -> int:
         register_website_commands(registry, config_mgr)
         register_navigation_commands(registry, config_mgr)
         register_customization_commands(registry, config_mgr)
+        register_file_commands(registry)
+        register_search_commands(registry)
 
         # Start shell
         shell = MayuriShell(
