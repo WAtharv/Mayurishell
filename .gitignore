@@ -29,3 +29,31 @@ logs/
 # IDEs
 .vscode/
 .idea/
+
+# Scratch and test leftovers
+scratch/
+test-area/
+test-organize/
+demo/
+cfg/
+hist.json
+*.log
+*.tmp
+
+# Build output
+/build/
+/dist/
+/Output/
+
+# Personal data and exports
+/config.json
+/history.json
+organize_undo.json
+mayurishell_diagnostics_*.txt
+
+# Editors and AI tools
+.vscode/
+.idea/
+.gemini/
+.agent/
+.agents/
