@@ -28,6 +28,19 @@ class CommandExecutor:
             True if execution was successful or handled cleanly,
             False if an error occurred.
         """
+        # Resolve aliases if AliasManager is present on context
+        alias_mgr = getattr(context, "alias_manager", None)
+        if alias_mgr:
+            from core.exceptions import AliasLoopError
+            try:
+                resolved_name, resolved_args = alias_mgr.resolve(parsed.name, parsed.args)
+                if resolved_name != parsed.name or resolved_args != parsed.args:
+                    parsed = ParsedCommand(name=resolved_name, args=resolved_args, raw=parsed.raw)
+            except AliasLoopError as loop_err:
+                logger.error("Alias resolution loop: %s", loop_err)
+                self.console.print(f"[bold red]Alias Loop Error:[/bold red] {loop_err}")
+                return False
+
         cmd_info = self.registry.get(parsed.name)
         if not cmd_info:
             suggestions = self.registry.suggest(parsed.name)

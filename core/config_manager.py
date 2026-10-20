@@ -19,10 +19,32 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "username": "Mayuri",
     "prompt_theme": "default",
     "prompt_template": "{username}@{hostname} > ",
-    "applications": {},
-    "websites": {},
-    "folder_shortcuts": {},
-    "aliases": {},
+    "applications": {
+        "notepad": "notepad.exe",
+        "calculator": "calc.exe",
+        "code": "code",
+        "spotify": "spotify:",
+        "discord": "discord:",
+        "whatsapp": "whatsapp:",
+    },
+    "websites": {
+        "youtube": "https://www.youtube.com",
+        "github": "https://www.github.com",
+        "google": "https://www.google.com",
+        "chatgpt": "https://chatgpt.com",
+    },
+    "folder_shortcuts": {
+        "desktop": "~/Desktop",
+        "downloads": "~/Downloads",
+        "documents": "~/Documents",
+        "projects": "~/Projects",
+        "home": "~",
+    },
+    "aliases": {
+        "yt": "youtube",
+        "gh": "github",
+        "dl": "downloads",
+    },
     "search_directories": [],
     "excluded_directories": [".git", "node_modules", ".venv", "__pycache__"],
     "preferences": {
@@ -30,6 +52,16 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "show_welcome": True,
     },
 }
+
+
+def deep_merge_defaults(target: dict[str, Any], defaults: dict[str, Any]) -> dict[str, Any]:
+    """Recursively add missing keys from defaults into target without overwriting existing values."""
+    for key, def_val in defaults.items():
+        if key not in target:
+            target[key] = copy.deepcopy(def_val)
+        elif isinstance(target[key], dict) and isinstance(def_val, dict):
+            deep_merge_defaults(target[key], def_val)
+    return target
 
 
 def get_default_appdata_dir() -> Path:
@@ -90,10 +122,9 @@ class ConfigManager:
             if not isinstance(loaded, dict):
                 raise ConfigError("Configuration root must be a JSON object.")
             
-            # Merge with default keys to ensure new config keys exist
-            merged = copy.deepcopy(DEFAULT_CONFIG)
-            merged.update(loaded)
-            self.data = merged
+            # Merge with default keys to ensure new config keys and shortcuts exist
+            deep_merge_defaults(loaded, DEFAULT_CONFIG)
+            self.data = loaded
             logger.info("Successfully loaded configuration from %s", self.config_path)
             return self.data
 
@@ -142,6 +173,39 @@ class ConfigManager:
         self.data[key] = value
         if auto_save:
             self.save()
+
+    def get_applications(self) -> dict[str, str]:
+        """Return dict of configured applications."""
+        return dict(self.data.get("applications", {}))
+
+    def get_websites(self) -> dict[str, str]:
+        """Return dict of configured websites."""
+        return dict(self.data.get("websites", {}))
+
+    def get_folder_shortcuts(self) -> dict[str, str]:
+        """Return dict of configured folder shortcuts."""
+        return dict(self.data.get("folder_shortcuts", {}))
+
+    def get_aliases(self) -> dict[str, str]:
+        """Return dict of configured aliases."""
+        return dict(self.data.get("aliases", {}))
+
+    def set_shortcut(self, section: str, name: str, value: str) -> None:
+        """Set a shortcut under specified section (applications, websites, folder_shortcuts, aliases)."""
+        if section not in self.data or not isinstance(self.data[section], dict):
+            self.data[section] = {}
+        self.data[section][name.lower()] = value
+        self.save()
+
+    def remove_shortcut(self, section: str, name: str) -> bool:
+        """Remove a shortcut under specified section."""
+        if section in self.data and isinstance(self.data[section], dict):
+            key = name.lower()
+            if key in self.data[section]:
+                del self.data[section][key]
+                self.save()
+                return True
+        return False
 
     @staticmethod
     def expand_path(raw_path: str | Path) -> Path:

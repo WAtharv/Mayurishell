@@ -12,6 +12,7 @@ from prompt_toolkit.formatted_text import HTML
 from rich.console import Console
 from rich.panel import Panel
 
+from core.aliases import AliasManager
 from core.config_manager import ConfigManager
 from core.exceptions import ParseError
 from core.executor import CommandExecutor
@@ -31,11 +32,13 @@ class ShellContext:
         config: ConfigManager,
         registry: CommandRegistry,
         history_manager: HistoryManager,
+        alias_manager: AliasManager | None = None,
         console: Console | None = None,
     ) -> None:
         self.config = config
         self.registry = registry
         self.history_manager = history_manager
+        self.alias_manager = alias_manager if alias_manager is not None else AliasManager(config)
         self.console = console if console is not None else Console()
         self.running: bool = True
 
@@ -70,13 +73,16 @@ class MayuriShell:
         config: ConfigManager,
         registry: CommandRegistry,
         history_manager: HistoryManager,
+        alias_manager: AliasManager | None = None,
         console: Console | None = None,
     ) -> None:
         self.console = console if console is not None else Console()
+        self.alias_manager = alias_manager if alias_manager is not None else AliasManager(config)
         self.context = ShellContext(
             config=config,
             registry=registry,
             history_manager=history_manager,
+            alias_manager=self.alias_manager,
             console=self.console,
         )
         self.executor = CommandExecutor(registry=registry, console=self.console)

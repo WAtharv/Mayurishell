@@ -3,7 +3,12 @@ from __future__ import annotations
 
 import sys
 
+from commands.applications import register_application_commands
 from commands.builtins import register_builtin_commands
+from commands.customization import register_customization_commands
+from commands.navigation import register_navigation_commands
+from commands.websites import register_website_commands
+from core.aliases import AliasManager
 from core.config_manager import ConfigManager
 from core.history import HistoryManager
 from core.logging_config import setup_logging
@@ -20,18 +25,24 @@ def main() -> int:
         # Setup rotating file logging in %APPDATA%\MayuriShell\logs
         setup_logging(config_mgr.logs_dir)
 
-        # Initialize history manager
+        # Initialize history and alias managers
         history_mgr = HistoryManager(config_mgr.history_path)
+        alias_mgr = AliasManager(config_mgr)
 
-        # Initialize command registry and register builtins
+        # Initialize command registry and register commands
         registry = CommandRegistry()
         register_builtin_commands(registry)
+        register_application_commands(registry, config_mgr)
+        register_website_commands(registry, config_mgr)
+        register_navigation_commands(registry, config_mgr)
+        register_customization_commands(registry, config_mgr)
 
         # Start shell
         shell = MayuriShell(
             config=config_mgr,
             registry=registry,
             history_manager=history_mgr,
+            alias_manager=alias_mgr,
         )
         shell.run()
         return 0

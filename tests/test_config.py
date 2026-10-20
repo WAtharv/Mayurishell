@@ -68,3 +68,34 @@ def test_expand_path(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("TEST_MAYURI_VAR", "SampleFolder")
     expanded = ConfigManager.expand_path("%TEST_MAYURI_VAR%\\sub")
     assert "SampleFolder" in str(expanded)
+
+
+def test_deep_merge_defaults_preserves_user_settings(tmp_path: Path) -> None:
+    """Test that loading an existing config keeps user customizations while adding missing defaults."""
+    mgr = ConfigManager(base_dir=tmp_path)
+    # User customized an app and added a custom website
+    mgr.data["applications"]["notepad"] = "C:\\Custom\\notepad.exe"
+    mgr.data["websites"]["customsite"] = "https://custom.site"
+    # Remove one default to test it gets restored
+    del mgr.data["websites"]["youtube"]
+    mgr.save()
+
+    # Reload
+    reloaded = ConfigManager(base_dir=tmp_path)
+    # User customizations preserved
+    assert reloaded.get_applications()["notepad"] == "C:\\Custom\\notepad.exe"
+    assert reloaded.get_websites()["customsite"] == "https://custom.site"
+    # Missing default restored
+    assert reloaded.get_websites()["youtube"] == "https://www.youtube.com"
+
+
+def test_shortcut_helpers(tmp_path: Path) -> None:
+    """Test setting and removing shortcuts via ConfigManager."""
+    mgr = ConfigManager(base_dir=tmp_path)
+    mgr.set_shortcut("websites", "myblog", "https://myblog.dev")
+    assert mgr.get_websites()["myblog"] == "https://myblog.dev"
+
+    removed = mgr.remove_shortcut("websites", "myblog")
+    assert removed is True
+    assert "myblog" not in mgr.get_websites()
+

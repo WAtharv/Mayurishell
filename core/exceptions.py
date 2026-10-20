@@ -31,3 +31,14 @@ class CommandExecutionError(MayuriShellError):
 class ArgumentError(MayuriShellError):
     """Raised when command arguments do not meet requirements."""
     pass
+
+
+class AliasLoopError(MayuriShellError):
+    """Raised when an alias loop/cycle is detected."""
+    pass
+
+
+class AliasConflictError(MayuriShellError):
+    """Raised when an alias conflicts with a registered command."""
+    pass
+
