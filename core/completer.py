@@ -116,6 +116,10 @@ class MayuriCompleter(Completer):
             yield from self._complete_workflow(tokens, current_token)
         elif cmd == "diagnostics":
             yield from self._complete_diagnostics(tokens, current_token)
+        elif cmd == "suggestions":
+            for opt in ("on", "off"):
+                if opt.startswith(current_token.lower()):
+                    yield Completion(opt, start_position=-len(current_token), display=opt, display_meta=f"Turn suggestions {opt}")
         elif cmd in ("cd", "code"):
             yield from self._complete_paths(current_token, only_dirs=True, include_shortcuts=True)
         elif cmd in ("ls", "open", "info", "copy", "move", "rename", "delete", "touch", "add-folder"):

@@ -165,7 +165,7 @@ def test_alias_and_resolution_flow(tmp_path: Path) -> None:
     # Typing alias 'v' resolves to 'version' and executes
     shell.run_command_line("v")
     output = console.export_text()
-    assert "MayuriShell version 0.1.0" in output
+    assert "MayuriShell version 0.1.1" in output
 
     # Unalias
     shell.run_command_line("unalias v")

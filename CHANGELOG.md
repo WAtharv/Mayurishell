@@ -6,6 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [0.1.1] - 2026-10-22
+
+### Fixed
+- **Application Window Visibility:**
+  - Removed `SW_HIDE` from `launch_detached()` in `services/application_discovery.py` so GUI applications (`notepad`, `calculator`, `code`, etc.) display their normal interactive windows instead of running invisibly in the background.
+
+### Added
+- **Smart Command Suggestions:**
+  - Logic-only suggestions engine (`core/suggestions.py`) providing ranked typo corrections for commands, subcommands, options, and shortcuts using prefix matching and `difflib` (cutoff 0.6, < 50ms execution).
+  - Contextual hints on unknown commands: history frequency suggestions, directory path hints (capped at 200 entries, non-recursive, no file reading), and installed application discovery hints with session `shutil.which` caching.
+  - Interactive next-prompt prefill: automatically prefills the top suggestion on the very next interactive prompt when confident, and clears immediately on run, cancel (Ctrl+C), or input change.
+  - Safe failure hints across 8 command failure scenarios via `CommandResult.fail(..., hint=...)` (unknown commands, missing directories, missing applications, flag arguments refused on shortcuts, non-templated website shortcuts, protected system processes, invalid shortcut/alias names, and wildcard delete refusals).
+  - `suggestions` command (`suggestions [on|off]`) with tab completion, allowing users to toggle smart suggestions or inspect status.
+  - Safe alias collision protection ensuring `suggestions` cannot be shadowed by user-defined aliases.
+
+### Changed
+- **Privacy & Secret Protection:**
+  - Truncated echoed unknown command names to 40 characters.
+  - Added secret and token detection: inputs matching secret filters or long token-like strings suppress all suggestions, print clean "Command not found.", and are purged from history.
+  - Destructive command guard: if the closest match is a destructive command (`delete`, `move`, `rename`, `copy`, `process`, `organize`, `workflow`, `alias`, `config`), only the command name and its usage line are shown, never typed arguments or prompt prefill.
+  - Unknown command failure logging records only event counts (`Command failed: unknown command (count: N)`), never user input or arguments.
+
 ## [0.1.0] - 2026-10-20
 
 ### Initial Release: Personal Productivity Shell for Windows

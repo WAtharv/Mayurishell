@@ -48,6 +48,9 @@ class ShellContext:
         self.theme_manager: ThemeManager = theme_manager if theme_manager is not None else ThemeManager(config, console=self.console)
         self.running: bool = True
         self.last_mood: str = "neutral"
+        self.is_interactive: bool = True
+        self.next_prefill: str | None = None
+        self.shell: Any | None = None
 
     @property
     def theme(self) -> Any:
@@ -90,6 +93,8 @@ class MayuriShell:
             current_dir=current_dir,
             theme_manager=theme_manager,
         )
+        self.context.shell = self
+        self.next_prefill: str | None = None
         self.executor = CommandExecutor(registry=registry, console=self.console)
         
         # Configure prompt_toolkit session
@@ -211,6 +216,10 @@ class MayuriShell:
         Returns:
             True if executed cleanly, False on parse/execution errors.
         """
+        # Clear any staged prefill when a command is executed
+        self.next_prefill = None
+        self.context.next_prefill = None
+
         stripped = line.strip()
         if not stripped:
             return True
@@ -244,6 +253,7 @@ class MayuriShell:
         # If stdin is redirected/piped, execute lines in non-interactive batch mode
         import sys
         if sys.stdin and not sys.stdin.isatty():
+            self.context.is_interactive = False
             for line in sys.stdin:
                 line_str = line.strip()
                 if line_str:
@@ -255,10 +265,15 @@ class MayuriShell:
 
         while self.context.running:
             try:
-                user_input = self.session.prompt(self.get_prompt_text())
+                prefill = self.next_prefill or self.context.next_prefill or ""
+                self.next_prefill = None
+                self.context.next_prefill = None
+                user_input = self.session.prompt(self.get_prompt_text(), default=prefill)
                 self.run_command_line(user_input)
             except KeyboardInterrupt:
-                # Ctrl+C resets current prompt line without crashing or exiting
+                # Ctrl+C resets current prompt line without crashing or exiting and clears prefill
+                self.next_prefill = None
+                self.context.next_prefill = None
                 theme = self.context.theme
                 self.console.print(f"\n{theme.format_muted('KeyboardInterrupt: Operation cancelled. (Ctrl+D to exit)')}")
                 continue

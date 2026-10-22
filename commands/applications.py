@@ -23,7 +23,7 @@ def check_shortcut_collision(name: str, current_section: str, context: Any) -> s
 
     if registry.has_command(key):
         cmd = registry.get(key)
-        if cmd and cmd.category == "Builtins":
+        if cmd and cmd.category != "Aliases":
             return f"Cannot use '{name}': conflicts with built-in command '{cmd.name}'."
 
     # Check other sections
@@ -76,7 +76,7 @@ def create_app_launcher_handler(app_name: str, target: str):
                     f"  VS Code executable (Code.exe) not found. Please install VS Code or update its target with: "
                     f"{theme.format_primary(f'add-app {app_name} <path-to-Code.exe>', bold=True)}"
                 )
-                return CommandResult.fail()
+                return CommandResult.fail(hint=f"Use 'add-app {app_name} <path>' to register the executable path.")
             console.print(
                 f"{theme.format_error('Application not found:')} '{escape(app_name)}' "
                 f"(target: {theme.format_muted(escape(current_target))})"
@@ -85,7 +85,7 @@ def create_app_launcher_handler(app_name: str, target: str):
                 f"  Please verify it is installed or update its target with: "
                 f"{theme.format_primary(f'add-app {app_name} <path>', bold=True)}"
             )
-            return CommandResult.fail()
+            return CommandResult.fail(hint=f"Use 'add-app {app_name} <path>' to register the executable path.")
 
         # 3. If args provided, validate that each is an existing path, not a flag
         resolved_abs_args: list[str] = []
@@ -101,7 +101,7 @@ def create_app_launcher_handler(app_name: str, target: str):
                 valid, resolved_p, err = validate_app_path_argument(raw_arg, context)
                 if not valid:
                     console.print(f"{theme.format_error('Error:')} {escape(err)}")
-                    return CommandResult.fail()
+                    return CommandResult.fail(err, hint="Application and shortcut arguments must be existing file paths, not flags.")
                 resolved_abs_args.append(str(resolved_p))
 
         success = launch_detached(resolved_exe, resolved_abs_args)
@@ -162,7 +162,7 @@ def handle_add_app(context: Any, args: list[str]) -> None:
     err = check_shortcut_collision(name, "applications", context)
     if err:
         console.print(f"{theme.format_error('Error:')} {escape(err)}")
-        return CommandResult.fail()
+        return CommandResult.fail(err, hint="Names must be alphanumeric without spaces and cannot collide with existing commands.")
 
     context.config.set_shortcut("applications", name, target)
     

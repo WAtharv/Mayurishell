@@ -67,7 +67,7 @@ def test_builtin_version(tmp_path: Path) -> None:
     res = shell.run_command_line("version")
     assert res is True
     output = console.export_text()
-    assert "MayuriShell version 0.1.0" in output
+    assert "MayuriShell version 0.1.1" in output
     assert "Python:" in output
 
 

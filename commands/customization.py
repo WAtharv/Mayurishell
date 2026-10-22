@@ -211,6 +211,43 @@ def handle_config(context: Any, args: list[str]) -> CommandResult:
     return CommandResult.success()
 
 
+def handle_suggestions(context: Any, args: list[str]) -> CommandResult:
+    """Turn smart command suggestions on or off, or display current status."""
+    console = context.console
+    theme = context.theme
+    config = context.config
+
+    if not args:
+        enabled = config.get_suggestions_enabled()
+        status_str = "on" if enabled else "off"
+        max_suggs = config.get_max_suggestions()
+        msg = f"Smart command suggestions: {status_str} (max {max_suggs})"
+        if theme.is_plain:
+            console.print(msg)
+        else:
+            colored_status = theme.format_success("on") if enabled else theme.format_warning("off")
+            console.print(f"Smart command suggestions: {colored_status} {theme.format_muted(f'(max {max_suggs})')}")
+        return CommandResult.success()
+
+    mode = args[0].strip().lower()
+    if mode in ("on", "off"):
+        config.set_suggestions_enabled(mode)
+        status_word = "enabled" if mode == "on" else "disabled"
+        msg = f"Smart command suggestions {status_word}."
+        if theme.is_plain:
+            console.print(msg)
+        else:
+            console.print(theme.format_success(msg, bold=True))
+        return CommandResult.success()
+    else:
+        err = f"Invalid option '{args[0]}'. Use 'suggestions on' or 'suggestions off'."
+        if theme.is_plain:
+            console.print(f"Error: {err}")
+        else:
+            console.print(f"{theme.format_error('Error:')} {escape(err)}")
+        return CommandResult.fail(err, hint="Usage: suggestions [on|off]")
+
+
 def register_customization_commands(registry: CommandRegistry, config: Any) -> None:
     """Register customization and inspection commands."""
     registry.register(
@@ -275,6 +312,17 @@ def register_customization_commands(registry: CommandRegistry, config: Any) -> N
             usage="config",
             category="General",
             arg_rules=ArgumentRules(min_args=0, max_args=0),
+        )
+    )
+
+    registry.register(
+        CommandInfo(
+            name="suggestions",
+            description="Toggle or inspect smart command suggestions (on|off)",
+            handler=handle_suggestions,
+            usage="suggestions [on|off]",
+            category="Customization",
+            arg_rules=ArgumentRules(min_args=0, max_args=1),
         )
     )
 

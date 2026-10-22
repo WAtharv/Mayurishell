@@ -212,7 +212,7 @@ def handle_process_kill(context: Any, args: list[str]) -> CommandResult:
     is_prot, reason = is_protected_process(pid)
     if is_prot:
         console.print(f"{theme.format_error('Action Refused:')} {escape(reason)}")
-        return CommandResult.fail()
+        return CommandResult.fail(reason, hint="Process is protected for Windows system stability and cannot be terminated.")
 
     # Fetch metadata for confirmation
     detail = get_process_detail(pid)

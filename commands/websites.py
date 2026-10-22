@@ -26,7 +26,12 @@ def create_website_launcher_handler(site_name: str, raw_url: str):
         valid, target_url_or_err = format_website_url(current_url, args, site_name=site_name)
         if not valid:
             console.print(f"{theme.format_error('Error:')} {escape(target_url_or_err)}")
-            return CommandResult.fail()
+            hint_msg = (
+                f"Update the site with 'add-website {site_name} <url-with-{{query}}>' to support search queries."
+                if "{query}" not in current_url and args
+                else "Provide a valid URL with an optional {query} template."
+            )
+            return CommandResult.fail(target_url_or_err, hint=hint_msg)
 
         success, msg = launch_website(target_url_or_err, site_name=site_name)
         if success:
@@ -92,7 +97,7 @@ def handle_add_website(context: Any, args: list[str]) -> None:
     err = check_shortcut_collision(name, "websites", context)
     if err:
         console.print(f"{theme.format_error('Error:')} {escape(err)}")
-        return CommandResult.fail()
+        return CommandResult.fail(err, hint="Names must be alphanumeric without spaces and cannot collide with existing commands.")
 
     # Validate URL (must be http or https, allows {query})
     valid, norm_url_or_err = validate_web_url(raw_url)

@@ -55,7 +55,7 @@ def run_selftest() -> int:
     known_modules = [
         "core.aliases", "core.completer", "core.config_manager", "core.exceptions",
         "core.executor", "core.history", "core.logging_config", "core.mascots",
-        "core.parser", "core.paths", "core.registry", "core.shell", "core.theme",
+        "core.parser", "core.paths", "core.registry", "core.shell", "core.suggestions", "core.theme",
         "core.version",
         "commands.appearance", "commands.applications", "commands.builtins",
         "commands.customization", "commands.files", "commands.navigation",
@@ -152,6 +152,7 @@ def run_selftest() -> int:
                 console=captured_console,
                 theme_manager=theme_mgr,
             )
+            context.is_interactive = False
             executor = CommandExecutor(registry, console=captured_console)
 
             # 6. Execute required safe, non-interactive commands

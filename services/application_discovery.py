@@ -168,7 +168,7 @@ def launch_detached(
        so the parent process is Explorer and cannot attach to MayuriShell's console.
     
     2. For executable paths:
-       Uses subprocess.Popen with CREATE_NEW_CONSOLE, STARTUPINFO with SW_HIDE, DEVNULL for all
+       Uses subprocess.Popen with CREATE_NEW_CONSOLE, DEVNULL for all
        three streams, close_fds=True, and shell=False. Falls back to explorer.exe if execution fails.
     
     Returns:
@@ -215,13 +215,9 @@ def launch_detached(
     try:
         # Log only application name, never argument paths
         logger.info("Launching executable: %s", log_name)
-        startupinfo = None
         creationflags = 0
 
         if sys.platform == "win32":
-            startupinfo = subprocess.STARTUPINFO()
-            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-            startupinfo.wShowWindow = subprocess.SW_HIDE
             creationflags = getattr(subprocess, "CREATE_NEW_CONSOLE", 0x00000010)
 
         subprocess.Popen(
@@ -229,7 +225,6 @@ def launch_detached(
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
-            startupinfo=startupinfo,
             creationflags=creationflags,
             close_fds=True,
             shell=False,

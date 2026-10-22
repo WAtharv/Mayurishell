@@ -11,7 +11,7 @@ def test_default_config_creation(tmp_path: Path) -> None:
     mgr = ConfigManager(base_dir=tmp_path)
     assert mgr.config_path.exists()
     assert mgr.get("username") == "Mayuri"
-    assert mgr.get("version") == "0.1.0"
+    assert mgr.get("version") == "0.1.1"
     assert isinstance(mgr.get("applications"), dict)
 
 

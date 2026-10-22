@@ -288,7 +288,7 @@ def handle_delete(context: Any, args: list[str]) -> CommandResult:
     raw_target = targets[0]
     if any(ch in raw_target for ch in ("*", "?")):
         console.print(f"{theme.format_error('Error:')} Wildcards are not allowed in delete. Specify an exact file or folder.")
-        return CommandResult.fail()
+        return CommandResult.fail(hint="Wildcard deletion is refused for safety. Specify exact file names.")
 
     target_path, _ = context.resolve_path(raw_target)
     if not target_path.exists():
@@ -310,7 +310,7 @@ def handle_delete(context: Any, args: list[str]) -> CommandResult:
     )
     if is_prot:
         console.print(f"{theme.format_error('Deletion refused:')} {escape(reason)}")
-        return CommandResult.fail()
+        return CommandResult.fail(reason, hint="Target path is protected for system stability.")
 
     # Directory requires -r
     if target_path.is_dir() and not recursive:

@@ -86,7 +86,7 @@ def test_launch_detached_uri_and_store_app() -> None:
 
 
 def test_launch_detached_executable_streams_and_flags() -> None:
-    """Assert launch_detached uses CREATE_NEW_CONSOLE, hidden STARTUPINFO, DEVNULL, close_fds, and shell=False."""
+    """Assert launch_detached uses CREATE_NEW_CONSOLE, DEVNULL, close_fds, and shell=False without SW_HIDE."""
     with patch("services.application_discovery.find_executable", return_value="C:\\Fake\\code.exe"):
         with patch("subprocess.Popen") as mock_popen:
             success = launch_detached("code", ["my_project"])
@@ -108,11 +108,10 @@ def test_launch_detached_executable_streams_and_flags() -> None:
             flags = kwargs.get("creationflags", 0)
             assert flags & 0x00000010
 
-            # Hidden window STARTUPINFO on Windows
+            # Window visibility: must not hide GUI window with SW_HIDE
             startupinfo = kwargs.get("startupinfo")
             if startupinfo is not None:
-                assert startupinfo.dwFlags & subprocess.STARTF_USESHOWWINDOW
-                assert startupinfo.wShowWindow == subprocess.SW_HIDE
+                assert not (startupinfo.dwFlags & subprocess.STARTF_USESHOWWINDOW and startupinfo.wShowWindow == subprocess.SW_HIDE)
 
 
 def test_launch_detached_executable_fallback_to_explorer() -> None:

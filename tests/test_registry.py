@@ -84,4 +84,4 @@ def test_executor_handles_unknown_command() -> None:
     success = executor.execute(ParsedCommand(name="unknowncmd"), context=None)
     assert success is False
     output = console.export_text()
-    assert "Command not found: 'unknowncmd'" in output
+    assert "Command not found:" in output and "unknowncmd" in output

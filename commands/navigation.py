@@ -37,7 +37,7 @@ def handle_cd(context: Any, args: list[str]) -> CommandResult:
 
     if not target_path.exists():
         console.print(f"{theme.format_error('Directory not found:')} '{escape(str(target_path))}'")
-        return CommandResult.fail()
+        return CommandResult.fail("Directory not found", hint="Use 'add-folder <name> <path>' to create a folder shortcut, or 'cd' to navigate.")
 
     if not target_path.is_dir():
         console.print(f"{theme.format_error('Not a directory:')} '{escape(str(target_path))}'")
@@ -147,7 +147,7 @@ def create_folder_launcher_handler(folder_name: str, raw_path: str):
                 f"  Update this shortcut to an existing directory using: "
                 f"{theme.format_primary(f'add-folder {folder_name} <path>', bold=True)}"
             )
-            return CommandResult.fail()
+            return CommandResult.fail(msg, hint="Use 'add-folder <name> <path>' to create a folder shortcut, or 'cd' to navigate.")
     return handler
 
 
@@ -162,7 +162,7 @@ def handle_add_folder(context: Any, args: list[str]) -> CommandResult:
     err = check_shortcut_collision(name, "folder_shortcuts", context)
     if err:
         console.print(f"{theme.format_error('Error:')} {escape(err)}")
-        return CommandResult.fail()
+        return CommandResult.fail(err, hint="Names must be alphanumeric without spaces and cannot collide with existing commands.")
 
     # Path expansion and check
     expanded = Path(os.path.expanduser(os.path.expandvars(raw_path))).resolve()

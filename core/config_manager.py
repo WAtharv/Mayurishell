@@ -81,6 +81,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "reactive_mascot": "all",
         "prompt_symbol": ">",
         "prompt_host": "pc",
+        "suggestions": "on",
+        "max_suggestions": 3,
     },
 }
 
@@ -150,6 +152,7 @@ class ConfigManager:
         self.history_path = self.base_dir / "history.json"
         
         self.data: dict[str, Any] = {}
+        self.shortcuts_version: int = 0
         self._ensure_directories()
         self.load()
 
@@ -297,6 +300,7 @@ class ConfigManager:
         if section not in self.data or not isinstance(self.data[section], dict):
             self.data[section] = {}
         self.data[section][name.lower()] = value
+        self.shortcuts_version += 1
         self.save()
 
     def remove_shortcut(self, section: str, name: str) -> bool:
@@ -305,6 +309,7 @@ class ConfigManager:
             key = name.lower()
             if key in self.data[section]:
                 del self.data[section][key]
+                self.shortcuts_version += 1
                 self.save()
                 return True
         return False
@@ -421,3 +426,44 @@ class ConfigManager:
         """Get the prompt host name (default 'pc')."""
         val = self.data.get("preferences", {}).get("prompt_host", "pc")
         return str(val) if val else "pc"
+
+    def get_suggestions_enabled(self) -> bool:
+        """Return True if smart command suggestions are enabled ('on')."""
+        val = self.data.get("preferences", {}).get("suggestions", "on")
+        if isinstance(val, bool):
+            return val
+        if not isinstance(val, str) or val.strip().lower() not in ("on", "off"):
+            logger.warning("Invalid suggestions mode '%s'. Falling back to 'on'.", val)
+            return True
+        return val.strip().lower() == "on"
+
+    def set_suggestions_enabled(self, mode: str) -> None:
+        """Set preferences.suggestions to 'on' or 'off'."""
+        clean = mode.strip().lower()
+        if clean not in ("on", "off"):
+            raise ValueError(f"Invalid suggestions mode '{mode}'. Choose 'on' or 'off'.")
+        if "preferences" not in self.data or not isinstance(self.data["preferences"], dict):
+            self.data["preferences"] = {}
+        self.data["preferences"]["suggestions"] = clean
+        self.save()
+
+    def get_max_suggestions(self) -> int:
+        """Get preferences.max_suggestions (1 to 5, default 3)."""
+        val = self.data.get("preferences", {}).get("max_suggestions", 3)
+        try:
+            int_val = int(val)
+            if 1 <= int_val <= 5:
+                return int_val
+        except (ValueError, TypeError):
+            pass
+        logger.warning("Invalid max_suggestions '%s'. Falling back to 3.", val)
+        return 3
+
+    def set_max_suggestions(self, count: int) -> None:
+        """Set preferences.max_suggestions (1 to 5)."""
+        if not (1 <= count <= 5):
+            raise ValueError(f"max_suggestions must be between 1 and 5, got {count}.")
+        if "preferences" not in self.data or not isinstance(self.data["preferences"], dict):
+            self.data["preferences"] = {}
+        self.data["preferences"]["max_suggestions"] = count
+        self.save()

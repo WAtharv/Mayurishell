@@ -1,4 +1,4 @@
-# MayuriShell Command Catalog (v0.1.0)
+# MayuriShell Command Catalog (v0.1.1)
 
 This document lists every command available in MayuriShell. It is automatically generated from the internal command registry metadata.
 
@@ -367,6 +367,19 @@ mayuri@pc > alias c clear
 **Examples:**
 ```text
 mayuri@pc > aliases
+```
+
+### `suggestions`
+
+**Description:** Toggle or inspect smart command suggestions (on|off)
+
+**Usage:** `suggestions [on|off]`
+
+**Arguments:** Minimum: `0`, Maximum: `1`
+
+**Examples:**
+```text
+mayuri@pc > suggestions
 ```
 
 ### `unalias`
