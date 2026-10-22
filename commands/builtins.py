@@ -369,7 +369,11 @@ def handle_diagnostics(context: Any, args: list[str]) -> None:
     console.print(table)
     console.print(
         f"{theme.format_muted('Export a sanitized text report to Desktop with: ')}"
-        f"{theme.format_primary('diagnostics --export', bold=True)}\n"
+        f"{theme.format_primary('diagnostics --export', bold=True)}"
+    )
+    console.print(
+        f"{theme.format_muted('Inspect shell health and troubleshooting fixes with: ')}"
+        f"{theme.format_primary('doctor', bold=True)}\n"
     )
     return CommandResult.success()
 

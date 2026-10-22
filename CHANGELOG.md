@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [Unreleased]
+
+### Added
+- **Config Management Subcommands (`config export`, `config import`, `config backup`, `config restore`):**
+  - `config export [file]`: Exports whitelisted shell configuration (themes, mascots, safe preferences, shortcuts, workflows, organize categories, search directories) to a clean, sanitized JSON format (`schema_version: 1`). Sensitive data (history, logs, backups, undo journal, username, hostname, credentials) are strictly excluded. Automatically normalizes home paths to `~/`. Refuses overwriting existing files or following symlinks. Falls back gracefully to user home folder if Desktop is not writable, with user warning regarding personal folder/app paths.
+  - `config import <file> [--dry-run] [--overwrite]`: Enforces 1MB size limit and schema version <= 1. Strictly refuses symlinks/junctions and non-regular files. Comprehensive diff preview table categorizing items into ADDED, UNCHANGED, CONFLICTING, and SKIPPED. Previews workflow steps with resolved targets (folder paths and final search URLs) and flags steps whose shortcuts do not exist on this PC. Full application shortcut targets listed with launch notices and separate confirmation prompt for executable shortcuts. Atomic apply to `config.json` via temporary file and flush before replacement, with automatic pre-import backup.
+  - `config backup`: Generates timestamped snapshot in `backups/` using safe atomic writes. Never automatically deletes existing backups; warns when backup count exceeds 50.
+  - `config restore [name]`: Lists available backups with timestamps and sizes when run without arguments. Restores configuration from plain filename resolving inside `backups/`. Rejects directory separators, path traversal, symlinks, and junctions. Validates backup structure (themes, mascots, apps, websites, folders, aliases, workflows) *before* touching current config; refuses corrupt files. Creates pre-restore backup first and applies atomically.
+- **Doctor System Health Diagnostics (`doctor [apps|python|config|all]`):**
+  - Comprehensive system health and troubleshooting inspection command with read-only invariant (never modifies configuration or executes automatic fixes).
+  - `doctor apps`: Validates configured applications (existence on PATH or disk, batch script limitations), folder shortcuts (3-second timeout on disk/network path checks), website URL templates, and workflow step validity and target resolution.
+  - `doctor python`: Checks Python installations on system PATH with 5-second timeout and closed streams (`stdin=DEVNULL`). Automatically detects Microsoft Store redirector stubs without executing them and warns users.
+  - `doctor config`: Validates `config.json` and `history.json` integrity, performs ephemeral probe writes (`.probe_<uuid>.tmp`) to test write access on base data, logs, backups, and desktop directories inside `try/finally` blocks ensuring immediate deletion, and inspects backup counts.
+  - Read-only Windows Registry protocol inspection (`HKCU\Software\Classes` and `HKEY_CLASSES_ROOT`) returning `UNKNOWN` on non-Windows/CI or registry errors, never writing.
+  - Strict privacy protections: console report never prints environment variables, usernames, or hostnames, table detail column wraps with `overflow="fold"`, and logging records only summary event counts (`OK`, `WARN`, `FAIL`, `UNKNOWN`) without logging user paths or targets.
+  - Added `doctor` to `--selftest` and command suggestions.
+  - Added hint in `diagnostics` referencing `doctor`.
+- **Shell Completion & Suggestions:**
+  - Added tab completion in `core/completer.py` for `config` subcommands (`export`, `import`, `backup`, `restore`, options, backup names, file paths) and `doctor` categories (`apps`, `python`, `config`, `all`).
+  - Added smart suggestion candidate rules for `config` and `doctor` subcommands in `core/suggestions.py`.
+
 ## [0.1.1] - 2026-10-22
 
 ### Fixed

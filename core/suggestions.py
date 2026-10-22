@@ -99,6 +99,13 @@ COMMAND_ARGUMENTS: dict[str, dict[str, Any]] = {
     "suggestions": {
         "subcommands": ["on", "off"],
     },
+    "config": {
+        "subcommands": ["export", "import", "backup", "restore"],
+        "options": ["--dry-run", "--overwrite"],
+    },
+    "doctor": {
+        "subcommands": ["apps", "python", "config", "all"],
+    },
     "create-project": {
         "options": ["--template", "--here", "-t"],
         "values": {

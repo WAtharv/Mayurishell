@@ -1,15 +1,29 @@
 """Customization commands: alias, aliases, unalias, commands, command-info, config."""
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import Any
 
 from rich.markup import escape
 from rich.table import Table
 
 from commands.applications import check_shortcut_collision
+from commands.files import confirm_prompt
 from core.exceptions import AliasConflictError, AliasLoopError
 from core.executor import CommandResult
 from core.registry import ArgumentRules, CommandInfo, CommandRegistry
+from services.config_service import (
+    apply_imported_config,
+    backup_config,
+    build_import_preview,
+    export_config,
+    is_safe_regular_file,
+    list_backups,
+    load_and_validate_import_file,
+    restore_config,
+    validate_backup_data,
+)
 
 
 def create_alias_launcher_handler(alias_name: str, target: str):
@@ -192,23 +206,312 @@ def handle_command_info(context: Any, args: list[str]) -> CommandResult:
     return CommandResult.success()
 
 
-def handle_config(context: Any, args: list[str]) -> CommandResult:
-    """Display configuration file and folder locations."""
+def handle_config_export(context: Any, sub_args: list[str]) -> CommandResult:
+    """Export configuration to a sanitized JSON file."""
     console = context.console
     theme = context.theme
     config = context.config
 
-    grid = Table.grid(padding=(0, 2))
-    grid.add_column(style=theme.bold_accent_style, justify="right")
-    grid.add_column(overflow="fold")
-    grid.add_row("Base Directory:", theme.format_text(escape(str(config.base_dir)), bold=True))
-    grid.add_row("Config File:", theme.format_primary(escape(str(config.config_path))))
-    grid.add_row("History File:", theme.format_primary(escape(str(config.history_path))))
-    grid.add_row("Logs Directory:", theme.format_primary(escape(str(config.logs_dir))))
-    grid.add_row("Backups Directory:", theme.format_primary(escape(str(config.backups_dir))))
+    target_arg = sub_args[0] if sub_args else None
+    cwd = getattr(context, "cwd", Path.cwd())
 
-    console.print(theme.create_panel(grid, title="MayuriShell - Configuration Locations"))
+    success, msg, dest, summary = export_config(config, target_path=target_arg, cwd=cwd)
+    if not success:
+        console.print(f"{theme.format_error('Export Failed:')} {escape(msg)}")
+        return CommandResult.fail(msg, hint="Choose an unused destination file path or verify directory permissions.")
+
+    console.print(theme.format_success(msg, bold=True))
+    console.print(f"\n{theme.format_accent('Included Sections:', bold=True)} {escape(', '.join(summary['included']))}")
+    if summary["machine_specific_paths"]:
+        console.print(f"{theme.format_warning('Machine-Specific Absolute Paths:', bold=True)}")
+        for msp in summary["machine_specific_paths"]:
+            console.print(f"  * {escape(msp)}")
+    console.print(f"{theme.format_muted('Excluded Items (Privacy):')} {escape(', '.join(summary['excluded']))}")
+    console.print(
+        f"\n{theme.format_warning('Security Notice:', bold=True)} "
+        f"Exported files contain configured folder shortcuts and application paths. "
+        f"Only share this file with people you trust.\n"
+    )
     return CommandResult.success()
+
+
+def handle_config_import(context: Any, sub_args: list[str]) -> CommandResult:
+    """Import and validate configuration settings from an exported JSON file."""
+    console = context.console
+    theme = context.theme
+    config = context.config
+
+    if not sub_args:
+        console.print(f"{theme.format_error('Usage:')} config import <file> [--dry-run] [--overwrite]")
+        return CommandResult.fail("Missing import file path", hint="Usage: config import <file> [--dry-run] [--overwrite]")
+
+    dry_run = any(arg.lower() in ("--dry-run", "-n") for arg in sub_args)
+    overwrite = any(arg.lower() in ("--overwrite", "-o") for arg in sub_args)
+    file_args = [arg for arg in sub_args if not arg.startswith("-")]
+
+    if not file_args:
+        console.print(f"{theme.format_error('Error:')} No file path specified for import.")
+        return CommandResult.fail("Missing file path", hint="Usage: config import <file> [--dry-run] [--overwrite]")
+
+    raw_path = file_args[0]
+    cwd = getattr(context, "cwd", Path.cwd())
+    resolved_path = (cwd / Path(raw_path)).resolve() if not Path(raw_path).is_absolute() else Path(raw_path).resolve()
+
+    # Load and validate file headers / size / schema
+    ok, err, imported_data, warnings = load_and_validate_import_file(resolved_path)
+    if not ok:
+        console.print(f"{theme.format_error('Import Error:')} {escape(err)}")
+        return CommandResult.fail(err)
+
+    for warn in warnings:
+        console.print(theme.format_warning(f"Warning: {escape(warn)}"))
+
+    assert imported_data is not None
+    # Build preview
+    preview = build_import_preview(config, imported_data, context)
+
+    # Display Preview Table
+    table = theme.create_table(title="Configuration Import Preview")
+    table.add_column("Status", justify="center", style=theme.bold_text_style, no_wrap=True)
+    table.add_column("Category", style=theme.bold_primary_style, no_wrap=True)
+    table.add_column("Item", style=theme.bold_accent_style, no_wrap=True)
+    table.add_column("Details", style=theme.text_style, overflow="fold")
+
+    for cat, name, detail in preview["added"]:
+        tag = "[ADDED]" if theme.is_plain else theme.format_success("[ADDED]", bold=True)
+        table.add_row(tag, escape(cat), escape(name), escape(str(detail)))
+
+    for cat, name, detail in preview["conflicting"]:
+        act = "(will replace)" if overwrite else "(will skip without --overwrite)"
+        tag = "[CONFLICT]" if theme.is_plain else theme.format_warning("[CONFLICT]", bold=True)
+        table.add_row(tag, escape(cat), escape(name), f"{escape(str(detail))} {theme.format_muted(act)}")
+
+    for cat, name, detail in preview["skipped"]:
+        tag = "[SKIPPED]" if theme.is_plain else theme.format_error("[SKIPPED]", bold=True)
+        table.add_row(tag, escape(cat), escape(name), escape(str(detail)))
+
+    for cat, name, detail in preview["unchanged"]:
+        tag = "[SAME]" if theme.is_plain else theme.format_muted("[SAME]")
+        table.add_row(tag, escape(cat), escape(name), escape(str(detail)))
+
+    console.print(table)
+
+    # Display App Shortcuts Detail
+    if preview["app_shortcuts"]:
+        console.print(f"\n{theme.format_warning('Application Shortcuts to Import:', bold=True)}")
+        for app_name, app_target in preview["app_shortcuts"]:
+            console.print(f"  * {theme.format_primary(escape(app_name), bold=True)} -> {escape(app_target)}")
+        console.print(
+            f"{theme.format_warning('Security Warning:')} "
+            f"Imported application shortcuts will execute programs when typed in the shell. "
+            f"These programs are launched when you type their name. "
+            f"Only import from sources you trust.\n"
+        )
+
+    # Display Workflows Detail with Resolved Targets
+    if preview["workflow_steps_detail"]:
+        console.print(f"\n{theme.format_primary('Workflow Steps Detail:', bold=True)}")
+        for wf_name, step_list in preview["workflow_steps_detail"]:
+            console.print(f"  Workflow '{theme.format_accent(escape(wf_name), bold=True)}':")
+            for s_info in step_list:
+                mark = ""
+                if not s_info.get("shortcut_on_pc", True):
+                    mark = f" {theme.format_error('[SHORTCUT NOT FOUND ON THIS PC]')}"
+                elif not s_info.get("exists_on_pc", True):
+                    mark = f" {theme.format_warning('[TARGET NOT FOUND ON THIS PC]')}"
+                console.print(f"    - {escape(str(s_info['step']))} ({theme.format_muted(escape(s_info['target']))}){mark}")
+        console.print()
+
+    # Dry-run termination
+    if dry_run:
+        console.print(theme.format_muted("[Dry Run] Preview complete. No changes were applied to configuration."))
+        return CommandResult.success()
+
+    # Check if there are any applicable changes
+    applicable_changes = len(preview["added"]) + (len(preview["conflicting"]) if overwrite else 0)
+    if applicable_changes == 0:
+        console.print(theme.format_muted("No new or applicable changes found to import."))
+        return CommandResult.success()
+
+    # Confirm general import
+    confirm_msg = "Apply imported configuration changes to your MayuriShell setup?"
+    if not confirm_prompt(console, confirm_msg, default_yes=False, theme=theme):
+        console.print(theme.format_muted("Import cancelled by user."))
+        return CommandResult.cancel()
+
+    # Separate confirmation for app shortcuts
+    include_apps = False
+    if preview["app_shortcuts"]:
+        app_confirm_msg = f"Import {len(preview['app_shortcuts'])} application shortcut(s)? (App shortcuts can launch programs)"
+        include_apps = confirm_prompt(console, app_confirm_msg, default_yes=False, theme=theme)
+        if not include_apps:
+            console.print(theme.format_muted("Skipping application shortcuts as requested."))
+
+    # Apply atomically with automatic pre-import backup
+    success, apply_msg = apply_imported_config(
+        config,
+        imported_data,
+        preview,
+        overwrite=overwrite,
+        include_apps=include_apps,
+        context=context,
+    )
+
+    if not success:
+        console.print(f"{theme.format_error('Import Failed:')} {escape(apply_msg)}")
+        return CommandResult.fail(apply_msg)
+
+    console.print(theme.format_success(apply_msg, bold=True))
+    return CommandResult.success()
+
+
+def handle_config_backup(context: Any, sub_args: list[str]) -> CommandResult:
+    """Create a timestamped backup of config.json."""
+    console = context.console
+    theme = context.theme
+    config = context.config
+
+    success, msg, _ = backup_config(config)
+    if success:
+        console.print(theme.format_success(msg, bold=True))
+        return CommandResult.success()
+    else:
+        console.print(f"{theme.format_error('Backup Failed:')} {escape(msg)}")
+        return CommandResult.fail(msg)
+
+
+def handle_config_restore(context: Any, sub_args: list[str]) -> CommandResult:
+    """List available backups or restore configuration from a backup file."""
+    console = context.console
+    theme = context.theme
+    config = context.config
+
+    if not sub_args:
+        # List backups
+        backups = list_backups(config)
+        if not backups:
+            console.print(theme.format_muted("No configuration backups found in backups/."))
+            return CommandResult.success()
+
+        table = theme.create_table(title="Available Configuration Backups")
+        table.add_column("Backup Name", style=theme.bold_primary_style, no_wrap=True)
+        table.add_column("Created / Modified", style=theme.text_style, no_wrap=True)
+        table.add_column("Size", justify="right", style=theme.muted_style, no_wrap=True)
+
+        for b in backups:
+            table.add_row(escape(b["name"]), escape(b["modified"]), escape(b["size_str"]))
+
+        console.print(table)
+        console.print(
+            f"{theme.format_muted('Restore a backup with: ')}"
+            f"{theme.format_primary('config restore <backup-name>', bold=True)}\n"
+        )
+        return CommandResult.success()
+
+    backup_name = sub_args[0].strip()
+
+    if "/" in backup_name or "\\" in backup_name or ".." in backup_name:
+        err = "Backup name must be a plain file name inside backups/ without directory separators."
+        console.print(f"{theme.format_error('Invalid Backup Name:')} {err}")
+        return CommandResult.fail(err, hint="Use 'config restore' to list available backup names.")
+
+    # Pre-validate before touching current configuration
+    target_backup_file = config.backups_dir / backup_name
+    is_safe, err_file = is_safe_regular_file(target_backup_file)
+    if not is_safe:
+        console.print(f"{theme.format_error('Invalid Backup:')} {escape(err_file)}")
+        return CommandResult.fail(err_file, hint="Use 'config restore' to list available backup names.")
+
+    if target_backup_file.resolve().parent != config.backups_dir.resolve():
+        err = "Backup file must reside directly in backups/ directory."
+        console.print(f"{theme.format_error('Invalid Backup:')} {err}")
+        return CommandResult.fail(err)
+
+    try:
+        with open(target_backup_file, "r", encoding="utf-8") as f:
+            backup_data = json.load(f)
+    except Exception as exc:
+        err = f"Backup file '{backup_name}' is corrupted or invalid JSON: {exc}"
+        console.print(f"{theme.format_error('Restore Refused:')} {escape(err)}")
+        return CommandResult.fail(err)
+
+    valid_struct, struct_err = validate_backup_data(backup_data)
+    if not valid_struct:
+        err = f"Backup file '{backup_name}' is corrupt: {struct_err}"
+        console.print(f"{theme.format_error('Restore Refused:')} {escape(err)}")
+        return CommandResult.fail(err)
+
+    # Show preview of the backup
+    theme_val = backup_data.get("theme", "-")
+    mascot_val = backup_data.get("mascot", "-")
+    apps_cnt = len(backup_data.get("applications", {}))
+    folders_cnt = len(backup_data.get("folder_shortcuts", {}))
+    web_cnt = len(backup_data.get("websites", {}))
+    aliases_cnt = len(backup_data.get("aliases", {}))
+    wf_cnt = len(backup_data.get("workflows", {}))
+
+    console.print(
+        f"{theme.format_primary('Backup Summary:', bold=True)} '{escape(backup_name)}'\n"
+        f"  Theme: {theme_val} | Mascot: {mascot_val}\n"
+        f"  Contents: {apps_cnt} apps, {folders_cnt} folders, {web_cnt} websites, {aliases_cnt} aliases, {wf_cnt} workflows\n"
+    )
+
+    confirm_msg = f"Restore configuration from '{backup_name}'? Current settings will be backed up first."
+    if not confirm_prompt(console, confirm_msg, default_yes=False, theme=theme):
+        console.print(theme.format_muted("Restore cancelled by user."))
+        return CommandResult.cancel()
+
+    success, msg, _ = restore_config(config, backup_name, context=context)
+    if not success:
+        console.print(f"{theme.format_error('Restore Failed:')} {escape(msg)}")
+        return CommandResult.fail(msg)
+
+    console.print(theme.format_success(msg, bold=True))
+    return CommandResult.success()
+
+
+def handle_config(context: Any, args: list[str]) -> CommandResult:
+    """Display configuration locations or manage configuration (export, import, backup, restore)."""
+    console = context.console
+    theme = context.theme
+    config = context.config
+
+    if not args:
+        grid = Table.grid(padding=(0, 2))
+        grid.add_column(style=theme.bold_accent_style, justify="right")
+        grid.add_column(overflow="fold")
+        grid.add_row("Base Directory:", theme.format_text(escape(str(config.base_dir)), bold=True))
+        grid.add_row("Config File:", theme.format_primary(escape(str(config.config_path))))
+        grid.add_row("History File:", theme.format_primary(escape(str(config.history_path))))
+        grid.add_row("Logs Directory:", theme.format_primary(escape(str(config.logs_dir))))
+        grid.add_row("Backups Directory:", theme.format_primary(escape(str(config.backups_dir))))
+
+        console.print(theme.create_panel(grid, title="MayuriShell - Configuration Locations"))
+        console.print(
+            f"{theme.format_muted('Manage configuration with: ')}"
+            f"{theme.format_primary('config export', bold=True)}{theme.format_muted(', ')}"
+            f"{theme.format_primary('config import', bold=True)}{theme.format_muted(', ')}"
+            f"{theme.format_primary('config backup', bold=True)}{theme.format_muted(', ')}"
+            f"{theme.format_primary('config restore', bold=True)}\n"
+        )
+        return CommandResult.success()
+
+    subcmd = args[0].strip().lower()
+    sub_args = args[1:]
+
+    if subcmd == "export":
+        return handle_config_export(context, sub_args)
+    elif subcmd == "import":
+        return handle_config_import(context, sub_args)
+    elif subcmd == "backup":
+        return handle_config_backup(context, sub_args)
+    elif subcmd == "restore":
+        return handle_config_restore(context, sub_args)
+    else:
+        err = f"Unknown config subcommand '{args[0]}'."
+        console.print(f"{theme.format_error('Error:')} {escape(err)}")
+        console.print("Valid subcommands: export, import, backup, restore.")
+        return CommandResult.fail(err, hint="Usage: config [export|import|backup|restore] [arguments]")
 
 
 def handle_suggestions(context: Any, args: list[str]) -> CommandResult:
@@ -307,11 +610,11 @@ def register_customization_commands(registry: CommandRegistry, config: Any) -> N
     registry.register(
         CommandInfo(
             name="config",
-            description="Display configuration file locations",
+            description="Manage shell configuration (export, import, backup, restore, locations)",
             handler=handle_config,
-            usage="config",
-            category="General",
-            arg_rules=ArgumentRules(min_args=0, max_args=0),
+            usage="config [export|import|backup|restore] [arguments]",
+            category="Customization",
+            arg_rules=ArgumentRules(min_args=0, max_args=None),
         )
     )
 

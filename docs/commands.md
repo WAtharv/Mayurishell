@@ -241,6 +241,19 @@ mayuri@pc > diagnostics
 mayuri@pc > diagnostics --export
 ```
 
+### `doctor`
+
+**Description:** Run system health checks and troubleshooting diagnostics
+
+**Usage:** `doctor [apps|python|config|all]`
+
+**Arguments:** Minimum: `0`, Maximum: `1`
+
+**Examples:**
+```text
+mayuri@pc > doctor
+```
+
 ### `exit`
 
 **Description:** Exit MayuriShell gracefully
@@ -367,6 +380,26 @@ mayuri@pc > alias c clear
 **Examples:**
 ```text
 mayuri@pc > aliases
+```
+
+### `config`
+
+**Description:** Manage shell configuration (export, import, backup, restore, locations)
+
+**Usage:** `config [export|import|backup|restore] [arguments]`
+
+**Arguments:** Minimum: `0`, Maximum: `Unlimited`
+
+**Examples:**
+```text
+mayuri@pc > config
+mayuri@pc > config show
+mayuri@pc > config get username
+mayuri@pc > config set prompt_symbol $
+mayuri@pc > config reset
+mayuri@pc > config path
+mayuri@pc > config backup
+mayuri@pc > config restore
 ```
 
 ### `suggestions`
@@ -608,26 +641,6 @@ mayuri@pc > command-info
 **Examples:**
 ```text
 mayuri@pc > commands
-```
-
-### `config`
-
-**Description:** Display configuration file locations
-
-**Usage:** `config`
-
-**Arguments:** Minimum: `0`, Maximum: `0`
-
-**Examples:**
-```text
-mayuri@pc > config
-mayuri@pc > config show
-mayuri@pc > config get username
-mayuri@pc > config set prompt_symbol $
-mayuri@pc > config reset
-mayuri@pc > config path
-mayuri@pc > config backup
-mayuri@pc > config restore
 ```
 
 ---

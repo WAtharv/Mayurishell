@@ -262,7 +262,11 @@ class ConfigManager:
                 else:
                     return default
             return curr
-        return self.data.get(key, default)
+        if key in self.data:
+            return self.data[key]
+        if key in ("theme", "mascot") and "display" in self.data and isinstance(self.data["display"], dict):
+            return self.data["display"].get(key, default)
+        return default
 
     def set(self, key: str, value: Any, auto_save: bool = True) -> None:
         """Set a configuration value, supporting dotted keys e.g. 'display.force_plain'."""
@@ -276,6 +280,10 @@ class ConfigManager:
             curr[parts[-1]] = value
         else:
             self.data[key] = value
+            if key in ("theme", "mascot"):
+                if "display" not in self.data or not isinstance(self.data["display"], dict):
+                    self.data["display"] = {}
+                self.data["display"][key] = value
         if auto_save:
             self.save()
 

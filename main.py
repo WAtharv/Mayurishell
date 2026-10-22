@@ -12,6 +12,7 @@ from commands.customization import register_customization_commands
 from commands.files import register_file_commands
 from commands.navigation import register_navigation_commands
 from commands.organization import register_organization_commands
+from commands.doctor import register_doctor_commands
 from commands.processes import register_process_commands
 from commands.project_scaffolding import register_project_commands
 from commands.search import register_search_commands
@@ -58,6 +59,7 @@ def register_all_commands(registry: CommandRegistry, config_mgr: ConfigManager) 
     register_organization_commands(registry, config_mgr)
     register_project_commands(registry, config_mgr)
     register_workflow_commands(registry, config_mgr)
+    register_doctor_commands(registry)
 
 
 def wait_for_enter_if_terminal() -> None:

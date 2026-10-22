@@ -116,6 +116,10 @@ class MayuriCompleter(Completer):
             yield from self._complete_workflow(tokens, current_token)
         elif cmd == "diagnostics":
             yield from self._complete_diagnostics(tokens, current_token)
+        elif cmd == "config":
+            yield from self._complete_config(tokens, current_token)
+        elif cmd == "doctor":
+            yield from self._complete_doctor(tokens, current_token)
         elif cmd == "suggestions":
             for opt in ("on", "off"):
                 if opt.startswith(current_token.lower()):
@@ -410,6 +414,56 @@ class MayuriCompleter(Completer):
         prefix = current_token.lower()
         if "--export".startswith(prefix):
             yield Completion("--export", start_position=-len(current_token), display="--export", display_meta="Export sanitized report to Desktop")
+
+    def _complete_config(self, tokens: list[str], current_token: str) -> Iterable[Completion]:
+        """Suggest subcommands, flags, backup names, and file paths for config."""
+        prefix = current_token.lower()
+        if len(tokens) == 1:
+            subcmds = [
+                ("export", "Export sanitized configuration JSON"),
+                ("import", "Import and validate configuration file"),
+                ("backup", "Create timestamped configuration snapshot"),
+                ("restore", "Restore configuration from backups/"),
+            ]
+            for sub, desc in subcmds:
+                if sub.startswith(prefix):
+                    yield Completion(sub, start_position=-len(current_token), display=sub, display_meta=desc)
+            return
+
+        subcmd = tokens[1].lower()
+        if subcmd == "export":
+            yield from self._complete_paths(current_token, only_dirs=False, include_shortcuts=False)
+        elif subcmd == "import":
+            for flag, desc in [("--dry-run", "Preview import without applying"), ("--overwrite", "Replace conflicting settings")]:
+                if flag.startswith(prefix):
+                    yield Completion(flag, start_position=-len(current_token), display=flag, display_meta=desc)
+            yield from self._complete_paths(current_token, only_dirs=False, include_shortcuts=False)
+        elif subcmd == "restore":
+            if hasattr(self.context, "config"):
+                backups_dir = self.context.config.backups_dir
+                if backups_dir.exists():
+                    for p in sorted(backups_dir.glob("*.json"), reverse=True):
+                        if p.name.lower().startswith(prefix):
+                            yield Completion(
+                                p.name,
+                                start_position=-len(current_token),
+                                display=p.name,
+                                display_meta="Backup file",
+                            )
+
+    def _complete_doctor(self, tokens: list[str], current_token: str) -> Iterable[Completion]:
+        """Suggest categories for doctor command."""
+        prefix = current_token.lower()
+        if len(tokens) == 1:
+            cats = [
+                ("apps", "Verify configured shortcuts, folders, websites, workflows"),
+                ("python", "Inspect Python interpreters on PATH"),
+                ("config", "Check configuration, history, and write permissions"),
+                ("all", "Run comprehensive health check across all categories"),
+            ]
+            for cat, desc in cats:
+                if cat.startswith(prefix):
+                    yield Completion(cat, start_position=-len(current_token), display=cat, display_meta=desc)
 
     def _complete_paths(
         self, current_token: str, only_dirs: bool = False, include_shortcuts: bool = False

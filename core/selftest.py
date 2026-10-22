@@ -58,10 +58,10 @@ def run_selftest() -> int:
         "core.parser", "core.paths", "core.registry", "core.shell", "core.suggestions", "core.theme",
         "core.version",
         "commands.appearance", "commands.applications", "commands.builtins",
-        "commands.customization", "commands.files", "commands.navigation",
+        "commands.customization", "commands.doctor", "commands.files", "commands.navigation",
         "commands.organization", "commands.processes", "commands.project_scaffolding",
         "commands.search", "commands.system", "commands.websites", "commands.workflows",
-        "services.application_discovery", "services.file_service",
+        "services.application_discovery", "services.config_service", "services.doctor_service", "services.file_service",
         "services.launcher_service", "services.system_service", "services.workflow_service",
     ]
 
@@ -130,6 +130,8 @@ def run_selftest() -> int:
             register_organization_commands(registry, config_mgr)
             register_project_commands(registry, config_mgr)
             register_workflow_commands(registry, config_mgr)
+            from commands.doctor import register_doctor_commands
+            register_doctor_commands(registry)
 
             cmd_names = registry.list_commands()
             report_check("Command registry population", len(cmd_names) > 0, f"{len(cmd_names)} commands registered")
@@ -167,6 +169,7 @@ def run_selftest() -> int:
                 "websites",
                 "aliases",
                 "diagnostics",
+                "doctor",
             ]
 
             for cmd in test_commands:
