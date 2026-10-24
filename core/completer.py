@@ -120,6 +120,12 @@ class MayuriCompleter(Completer):
             yield from self._complete_config(tokens, current_token)
         elif cmd == "doctor":
             yield from self._complete_doctor(tokens, current_token)
+        elif cmd == "project":
+            yield from self._complete_project(tokens, current_token)
+        elif cmd == "git":
+            yield from self._complete_git(tokens, current_token)
+        elif cmd == "prompt":
+            yield from self._complete_prompt(tokens, current_token)
         elif cmd == "suggestions":
             for opt in ("on", "off"):
                 if opt.startswith(current_token.lower()):
@@ -464,6 +470,70 @@ class MayuriCompleter(Completer):
             for cat, desc in cats:
                 if cat.startswith(prefix):
                     yield Completion(cat, start_position=-len(current_token), display=cat, display_meta=desc)
+
+    def _complete_project(self, tokens: list[str], current_token: str) -> Iterable[Completion]:
+        """Suggest subcommands and options for project command."""
+        prefix = current_token.lower()
+        if len(tokens) == 1:
+            subcmds = [
+                ("info", "Display summary of detected project stack"),
+                ("tree", "Show directory hierarchy capped at depth"),
+                ("doctor", "Check project configuration and dependencies"),
+                ("env", "Inspect Python virtual environment and activation"),
+            ]
+            for sub, desc in subcmds:
+                if sub.startswith(prefix):
+                    yield Completion(sub, start_position=-len(current_token), display=sub, display_meta=desc)
+            return
+
+        subcmd = tokens[1].lower()
+        if subcmd == "tree":
+            if prefix.startswith("-"):
+                for flag, desc in [("--depth", "Maximum directory depth (default 3)"), ("--all", "Show skipped directories (.git, venv)")]:
+                    if flag.startswith(prefix):
+                        yield Completion(flag, start_position=-len(current_token), display=flag, display_meta=desc)
+            else:
+                yield from self._complete_paths(current_token, only_dirs=True)
+
+    def _complete_git(self, tokens: list[str], current_token: str) -> Iterable[Completion]:
+        """Suggest read-only subcommands and options for git command."""
+        prefix = current_token.lower()
+        if len(tokens) == 1:
+            # Strictly read-only subcommands; write commands must never be suggested
+            subcmds = [
+                ("status", "Show branch and file change summary"),
+                ("log", "Show recent commits (1 to 50 entries)"),
+                ("diff", "Show changes or file diff (capped)"),
+                ("branches", "List local branches"),
+                ("summary", "Repository overview and safe next suggestions"),
+            ]
+            for sub, desc in subcmds:
+                if sub.startswith(prefix):
+                    yield Completion(sub, start_position=-len(current_token), display=sub, display_meta=desc)
+            return
+
+        subcmd = tokens[1].lower()
+        if subcmd == "log":
+            if "-n".startswith(prefix):
+                yield Completion("-n", start_position=-len(current_token), display="-n", display_meta="Number of commits (1-50)")
+        elif subcmd == "diff":
+            if prefix.startswith("-"):
+                for flag, desc in [("--staged", "Diff staged changes"), ("--cached", "Diff staged changes")]:
+                    if flag.startswith(prefix):
+                        yield Completion(flag, start_position=-len(current_token), display=flag, display_meta=desc)
+            else:
+                yield from self._complete_paths(current_token, only_dirs=False)
+
+    def _complete_prompt(self, tokens: list[str], current_token: str) -> Iterable[Completion]:
+        """Suggest options for prompt command."""
+        prefix = current_token.lower()
+        if len(tokens) == 1:
+            if "git".startswith(prefix):
+                yield Completion("git", start_position=-len(current_token), display="git", display_meta="Toggle Git branch in prompt")
+        elif len(tokens) == 2 and tokens[1].lower() == "git":
+            for opt in ("on", "off"):
+                if opt.startswith(prefix):
+                    yield Completion(opt, start_position=-len(current_token), display=opt, display_meta=f"Turn prompt git branch {opt}")
 
     def _complete_paths(
         self, current_token: str, only_dirs: bool = False, include_shortcuts: bool = False

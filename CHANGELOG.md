@@ -9,6 +9,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## [Unreleased]
 
 ### Added
+- **Project-Aware Commands (`project info`, `project tree`, `project doctor`, `project env`):**
+  - Non-destructive project root detection starting at current directory (never `os.getcwd`) and walking up at most 8 levels, stopping at drive root (`.git`, `pyproject.toml`, `requirements.txt`, `setup.py`, `setup.cfg`, `package.json`, `Pipfile`, `environment.yml`, `Dockerfile`, `manage.py`).
+  - Project stack detection for `python`, `ml` (numpy, pandas, torch, tensorflow, scikit-learn), `flask`, `fastapi`, `node`, `docker` via file names and capped 256 KB read of manifests with `tomllib`. Never executes, imports, or installs from projects.
+  - `project info`: High-level summary of name, root, detected stacks, git tracking, capped python files count, tests/readme presence, and declared dependency count (sanitized, lines containing `://` or `@` redacted).
+  - `project tree [path] [--depth N] [--all]`: Directory hierarchy capped at depth (default 3), 300 entries, 3-second budget, directories first. Skips excluded folders (`.git`, `node_modules`, `venv`, etc.) unless `--all`. Detects symlinks and junctions via lstat and `FILE_ATTRIBUTE_REPARSE_POINT` without descending into them. Strictly refuses filesystem drive roots and home directory as tree root. Formats with themed Unicode or plain-mode ASCII branches.
+  - `project env`: Virtual environment inspection for Python projects reading ONLY `pyvenv.cfg` (version, base home), showing PowerShell and cmd activation commands as text, checking real Python on PATH (reusing doctor service), reporting `.env` file presence without ever reading it or printing variable values, and listing requirements files.
+  - `project doctor`: 10 non-destructive health checks (root found, python detected, venv exists, manifests, git tracking, tests folder, README, .gitignore, `.env` not ignored, venv not ignored) with plain-text fix commands.
+- **Read-Only Git Assistant (`git status`, `git log`, `git diff`, `git branches`, `git summary`):**
+  - Strict allowlist refusing all write subcommands (`commit`, `push`, `pull`, `add`, `reset`, `checkout`, `switch`, `restore`, `clean`, `stash`, `rebase`, `merge`, `rm`, `config`, `remote`, `tag`, etc.) with read-only notice.
+  - Hardened execution through a single isolated runner: argument list, `shell=False`, stdin closed (`subprocess.DEVNULL`), 10-second timeout, 1MB output read cap, UTF-8 decode with `errors="replace"`, top-level hardening flags (`--no-pager`, `-c core.quotepath=false`, `-c core.fsmonitor=false`, `-c core.pager=cat`, `--no-optional-locks`), subcommand flags (`--no-ext-diff`, `--no-textconv`, `--no-color`, `--ignore-submodules=all`), isolated env (`GIT_TERMINAL_PROMPT=0`, `GIT_OPTIONAL_LOCKS=0`, `LC_ALL=C`), and all inherited `GIT_*` overrides stripped.
+  - Strict path validation for diff: must resolve inside repository, must not start with `-`, passed after `"--"`.
+  - Output sanitization: ANSI escape sequences and control characters stripped, credentials in URLs redacted (`***@`), status display capped at 50 files, diff capped at 200 lines.
+  - Porcelain v2 status parser (branch, ahead/behind counts, staged, modified, untracked, conflicts).
+  - Commit log with validated `-n 1..50` count (default 10, author name, no emails).
+  - Branches showing local branches, active branch marked, upstream tracking info, no remote URLs.
+  - Summary showing branch, working tree change counts, last commit (short hash, subject, relative date), and harmless read-only next suggestions.
+  - Error classification explaining common issues with safe fix hints (not a git repo, safe.directory, no commits, detached HEAD, conflicts, index.lock, path not found, timeout).
+  - Cheap prompt branch reader: non-blocking read of `.git/HEAD` (normal, worktree `gitdir:`, detached 7-char hash) walking up max 8 levels with directory caching, mtime invalidation, HTML escaping, control char stripping, 30-char cap, and NO subprocess invoked.
+  - Shell prompt toggle (`prompt git on|off`) and config preference (`preferences.prompt_git`).
+  - Added Git availability check in `doctor`.
+  - Added `git` and `project` to `FORBIDDEN_COMMANDS` in workflow engine.
+- **Tab Completion & Suggestions:**
+  - Tab completion and typo suggestion support for `project`, `git`, and `prompt` subcommands and options; git write subcommands strictly excluded.
+- **Self-Test Integration:**
+  - Added `project info` against isolated temporary project in `--selftest`.
+
 - **Config Management Subcommands (`config export`, `config import`, `config backup`, `config restore`):**
   - `config export [file]`: Exports whitelisted shell configuration (themes, mascots, safe preferences, shortcuts, workflows, organize categories, search directories) to a clean, sanitized JSON format (`schema_version: 1`). Sensitive data (history, logs, backups, undo journal, username, hostname, credentials) are strictly excluded. Automatically normalizes home paths to `~/`. Refuses overwriting existing files or following symlinks. Falls back gracefully to user home folder if Desktop is not writable, with user warning regarding personal folder/app paths.
   - `config import <file> [--dry-run] [--overwrite]`: Enforces 1MB size limit and schema version <= 1. Strictly refuses symlinks/junctions and non-regular files. Comprehensive diff preview table categorizing items into ADDED, UNCHANGED, CONFLICTING, and SKIPPED. Previews workflow steps with resolved targets (folder paths and final search URLs) and flags steps whose shortcuts do not exist on this PC. Full application shortcut targets listed with launch notices and separate confirmation prompt for executable shortcuts. Atomic apply to `config.json` via temporary file and flush before replacement, with automatic pre-import backup.

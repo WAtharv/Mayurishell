@@ -46,6 +46,8 @@ FORBIDDEN_COMMANDS = {
     "create-project",
     "templates",
     "diagnostics",
+    "git",
+    "project",
 }
 
 MAX_WORKFLOW_STEPS = 20

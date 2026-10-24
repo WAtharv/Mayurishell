@@ -150,10 +150,18 @@ class MayuriShell:
 
         escaped_symbol = "&gt;" if prompt_symbol == ">" else prompt_symbol.replace("&", "&amp;").replace("<", "&lt;")
 
+        # Read Git branch cheaply without subprocess
+        prompt_git = self.context.config.get_prompt_git_enabled()
+        git_branch = None
+        if prompt_git:
+            from services.git_service import get_prompt_git_branch
+            git_branch = get_prompt_git_branch(self.context.current_dir)
+
         # In plain mode: strictly ASCII with no formatting tags
         if theme.is_plain:
             cwd_str = f" {short_path}" if short_path else ""
-            return HTML(f"{username}@{host}{cwd_str} {escaped_symbol} ")
+            git_str = f" ({git_branch})" if git_branch else ""
+            return HTML(f"{username}@{host}{cwd_str}{git_str} {escaped_symbol} ")
 
         # Colored mode: style using theme tokens (no emoji in prompt)
         def _clean_pt_color(color: str) -> str:
@@ -167,11 +175,13 @@ class MayuriShell:
         muted_color = _clean_pt_color(theme.muted)
 
         cwd_segment = f' <style color="{accent_color}">{short_path}</style>' if short_path else ""
+        git_segment = f' <style color="{muted_color}">({git_branch})</style>' if git_branch else ""
 
         return HTML(
             f'<style color="{primary_color}">{username}</style>'
             f'<style color="{muted_color}">@{host}</style>'
-            f'{cwd_segment} '
+            f'{cwd_segment}'
+            f'{git_segment} '
             f'<style color="{primary_color}">{escaped_symbol}</style> '
         )
 

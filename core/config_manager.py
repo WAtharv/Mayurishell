@@ -83,6 +83,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "prompt_host": "pc",
         "suggestions": "on",
         "max_suggestions": 3,
+        "prompt_git": "on",
     },
 }
 
@@ -475,3 +476,24 @@ class ConfigManager:
             self.data["preferences"] = {}
         self.data["preferences"]["max_suggestions"] = count
         self.save()
+
+    def get_prompt_git_enabled(self) -> bool:
+        """Return True if prompt_git is enabled ('on')."""
+        val = self.data.get("preferences", {}).get("prompt_git", "on")
+        if isinstance(val, bool):
+            return val
+        if not isinstance(val, str) or val.strip().lower() not in ("on", "off"):
+            logger.warning("Invalid prompt_git mode '%s'. Falling back to 'on'.", val)
+            return True
+        return val.strip().lower() == "on"
+
+    def set_prompt_git_enabled(self, mode: str) -> None:
+        """Set preferences.prompt_git to 'on' or 'off'."""
+        clean = mode.strip().lower()
+        if clean not in ("on", "off"):
+            raise ValueError(f"Invalid prompt_git mode '{mode}'. Choose 'on' or 'off'.")
+        if "preferences" not in self.data or not isinstance(self.data["preferences"], dict):
+            self.data["preferences"] = {}
+        self.data["preferences"]["prompt_git"] = clean
+        self.save()
+

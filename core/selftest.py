@@ -58,11 +58,11 @@ def run_selftest() -> int:
         "core.parser", "core.paths", "core.registry", "core.shell", "core.suggestions", "core.theme",
         "core.version",
         "commands.appearance", "commands.applications", "commands.builtins",
-        "commands.customization", "commands.doctor", "commands.files", "commands.navigation",
-        "commands.organization", "commands.processes", "commands.project_scaffolding",
+        "commands.customization", "commands.doctor", "commands.files", "commands.git", "commands.navigation",
+        "commands.organization", "commands.processes", "commands.project", "commands.project_scaffolding",
         "commands.search", "commands.system", "commands.websites", "commands.workflows",
         "services.application_discovery", "services.config_service", "services.doctor_service", "services.file_service",
-        "services.launcher_service", "services.system_service", "services.workflow_service",
+        "services.git_service", "services.launcher_service", "services.project_service", "services.system_service", "services.workflow_service",
     ]
 
     imported_count = 0
@@ -108,9 +108,11 @@ def run_selftest() -> int:
             from commands.builtins import register_builtin_commands
             from commands.customization import register_customization_commands
             from commands.files import register_file_commands
+            from commands.git import register_git_commands
             from commands.navigation import register_navigation_commands
             from commands.organization import register_organization_commands
             from commands.processes import register_process_commands
+            from commands.project import register_project_aware_commands
             from commands.project_scaffolding import register_project_commands
             from commands.search import register_search_commands
             from commands.system import register_system_commands
@@ -129,6 +131,8 @@ def run_selftest() -> int:
             register_process_commands(registry)
             register_organization_commands(registry, config_mgr)
             register_project_commands(registry, config_mgr)
+            register_project_aware_commands(registry)
+            register_git_commands(registry)
             register_workflow_commands(registry, config_mgr)
             from commands.doctor import register_doctor_commands
             register_doctor_commands(registry)
@@ -156,6 +160,12 @@ def run_selftest() -> int:
             )
             context.is_interactive = False
             executor = CommandExecutor(registry, console=captured_console)
+            # Create an isolated dummy project for project-aware command testing
+            sample_project = temp_dir / "sample_project"
+            sample_project.mkdir(parents=True, exist_ok=True)
+            (sample_project / "pyproject.toml").write_text('[project]\nname = "test-project"\nversion = "0.1.0"\n', encoding="utf-8")
+            (sample_project / "README.md").write_text("# Test Project\n", encoding="utf-8")
+            context.current_dir = sample_project
 
             # 6. Execute required safe, non-interactive commands
             from core.parser import parse_command_line
@@ -170,6 +180,7 @@ def run_selftest() -> int:
                 "aliases",
                 "diagnostics",
                 "doctor",
+                "project info",
             ]
 
             for cmd in test_commands:

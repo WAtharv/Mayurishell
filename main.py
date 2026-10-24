@@ -14,7 +14,9 @@ from commands.navigation import register_navigation_commands
 from commands.organization import register_organization_commands
 from commands.doctor import register_doctor_commands
 from commands.processes import register_process_commands
+from commands.project import register_project_aware_commands
 from commands.project_scaffolding import register_project_commands
+from commands.git import register_git_commands
 from commands.search import register_search_commands
 from commands.system import register_system_commands
 from commands.websites import register_website_commands
@@ -58,6 +60,8 @@ def register_all_commands(registry: CommandRegistry, config_mgr: ConfigManager) 
     register_process_commands(registry)
     register_organization_commands(registry, config_mgr)
     register_project_commands(registry, config_mgr)
+    register_project_aware_commands(registry)
+    register_git_commands(registry)
     register_workflow_commands(registry, config_mgr)
     register_doctor_commands(registry)
 

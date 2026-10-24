@@ -12,11 +12,13 @@ This document lists every command available in MayuriShell. It is automatically 
 - [Files](#files)
 - [Folders](#folders)
 - [General](#general)
+- [Git](#git)
 - [Launchers](#launchers)
 - [Navigation](#navigation)
 - [Organization](#organization)
 - [Processes](#processes)
 - [Productivity](#productivity)
+- [Projects](#projects)
 - [Search](#search)
 - [System](#system)
 - [Websites](#websites)
@@ -109,6 +111,21 @@ mayuri@pc > mascot shiba
 **Examples:**
 ```text
 mayuri@pc > pet
+```
+
+### `prompt`
+
+**Description:** Configure prompt settings (e.g. prompt git on|off)
+
+**Usage:** `prompt [git on|off]`
+
+**Arguments:** Minimum: `0`, Maximum: `2`
+
+**Examples:**
+```text
+mayuri@pc > prompt
+mayuri@pc > prompt git on
+mayuri@pc > prompt git off
 ```
 
 ### `theme`
@@ -645,6 +662,28 @@ mayuri@pc > commands
 
 ---
 
+## Git
+
+### `git`
+
+**Description:** Read-only Git assistant (status, log, diff, branches, summary)
+
+**Usage:** `git [status|log|diff|branches|summary] [options]`
+
+**Arguments:** Minimum: `0`, Maximum: `Unlimited`
+
+**Examples:**
+```text
+mayuri@pc > git status
+mayuri@pc > git log -n 5
+mayuri@pc > git diff
+mayuri@pc > git diff --staged
+mayuri@pc > git branches
+mayuri@pc > git summary
+```
+
+---
+
 ## Launchers
 
 ### `apps`
@@ -808,6 +847,27 @@ mayuri@pc > create-project --list-templates
 **Examples:**
 ```text
 mayuri@pc > templates
+```
+
+---
+
+## Projects
+
+### `project`
+
+**Description:** Inspect project stack, tree hierarchy, environment, and doctor health
+
+**Usage:** `project [info|tree|doctor|env] [options]`
+
+**Arguments:** Minimum: `0`, Maximum: `Unlimited`
+
+**Examples:**
+```text
+mayuri@pc > project info
+mayuri@pc > project tree
+mayuri@pc > project tree --depth 2
+mayuri@pc > project doctor
+mayuri@pc > project env
 ```
 
 ---

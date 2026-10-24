@@ -311,6 +311,55 @@ def handle_pet(context: Any, args: list[str]) -> CommandResult:
     return CommandResult.success()
 
 
+def handle_prompt(context: Any, args: list[str]) -> CommandResult:
+    """Toggle or inspect shell prompt settings, including Git branch display."""
+    console = context.console
+    theme = context.theme
+    config = context.config
+
+    if not args:
+        symbol = config.get_prompt_symbol()
+        host = config.get_prompt_host()
+        git_enabled = config.get_prompt_git_enabled()
+        status_str = "on" if git_enabled else "off"
+
+        console.print(theme.format_primary("Shell Prompt Settings:", bold=True))
+        console.print(f"  Symbol: {theme.format_accent(escape(symbol))}")
+        console.print(f"  Host:   {theme.format_accent(escape(host))}")
+        console.print(f"  Git branch in prompt: {theme.format_success(status_str) if git_enabled else theme.format_warning(status_str)}")
+        console.print(theme.format_muted("\nUsage: prompt git on|off"))
+        return CommandResult.success()
+
+    subcmd = args[0].lower()
+    if subcmd == "git":
+        if len(args) == 1:
+            git_enabled = config.get_prompt_git_enabled()
+            status_str = "on" if git_enabled else "off"
+            console.print(f"Prompt git branch display: {status_str}")
+            return CommandResult.success()
+
+        val = args[1].lower()
+        if val in ("on", "off"):
+            try:
+                config.set_prompt_git_enabled(val)
+                msg = f"Prompt git branch display set to '{val}'."
+                if theme.is_plain:
+                    console.print(msg)
+                else:
+                    console.print(theme.format_success(msg, bold=True))
+                return CommandResult.success()
+            except ValueError as exc:
+                return CommandResult.fail(str(exc))
+        else:
+            err = f"Invalid option '{args[1]}'. Use 'prompt git on' or 'prompt git off'."
+            console.print(f"{theme.format_error('Error:')} {escape(err)}")
+            return CommandResult.fail(err, hint="Usage: prompt git on|off")
+
+    err = f"Unknown prompt subcommand '{args[0]}'."
+    console.print(f"{theme.format_error('Error:')} {escape(err)}")
+    return CommandResult.fail(err, hint="Usage: prompt [git on|off]")
+
+
 def register_appearance_commands(registry: CommandRegistry) -> None:
     """Register all visual appearance commands in the CommandRegistry."""
     registry.register(
@@ -351,5 +400,15 @@ def register_appearance_commands(registry: CommandRegistry) -> None:
             usage="pet",
             category="Appearance",
             arg_rules=ArgumentRules(min_args=0, max_args=0),
+        )
+    )
+    registry.register(
+        CommandInfo(
+            name="prompt",
+            description="Configure prompt settings (e.g. prompt git on|off)",
+            handler=handle_prompt,
+            usage="prompt [git on|off]",
+            category="Appearance",
+            arg_rules=ArgumentRules(min_args=0, max_args=2),
         )
     )

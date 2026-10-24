@@ -662,6 +662,38 @@ def check_config_health(context: Any) -> list[DoctorFinding]:
     return findings
 
 
+def check_git_availability() -> DoctorFinding:
+    """Inspect Git executable availability on PATH and test with --version through hardened runner."""
+    from services.git_service import find_git_executable, run_hardened_git
+    git_bin = find_git_executable()
+    if not git_bin:
+        return DoctorFinding(
+            category="git",
+            name="Git Version Control",
+            status="WARN",
+            message="Git executable not found on PATH or standard install paths.",
+            fix="Install Git for Windows from https://git-scm.com/download/win",
+        )
+
+    res = run_hardened_git(["--version"], cwd=Path.home())
+    if res.success and res.stdout.strip():
+        ver_str = res.stdout.strip()
+        return DoctorFinding(
+            category="git",
+            name="Git Version Control",
+            status="OK",
+            message=f"{ver_str} ({git_bin})",
+        )
+
+    return DoctorFinding(
+        category="git",
+        name="Git Version Control",
+        status="WARN",
+        message=f"Git detected at '{git_bin}' but '--version' exited with code {res.returncode}.",
+        fix="Verify your Git installation.",
+    )
+
+
 # ============================================================================
 # AGGREGATOR
 # ============================================================================
@@ -677,6 +709,7 @@ def run_doctor(category: str = "all", context: Any = None) -> tuple[list[DoctorF
 
     if clean_cat in ("apps", "all"):
         findings.extend(check_apps_health(context))
+        findings.append(check_git_availability())
     if clean_cat in ("python", "all"):
         findings.extend(check_python_health(context))
     if clean_cat in ("config", "all"):

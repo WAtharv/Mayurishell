@@ -71,6 +71,9 @@ COMMAND_EXAMPLES: dict[str, list[str]] = {
     "organize": ["organize downloads", "organize downloads --dry-run", "organize downloads --include-other", "organize undo"],
     "create-project": ["create-project my-app", "create-project ml-pipeline --template ml", "create-project api-server --template fastapi", "create-project --list-templates"],
     "workflow": ["workflow list", "workflow run dev", "workflow show web", "workflow add study 'notion, spotify'", "workflow remove study"],
+    "project": ["project info", "project tree", "project tree --depth 2", "project doctor", "project env"],
+    "git": ["git status", "git log -n 5", "git diff", "git diff --staged", "git branches", "git summary"],
+    "prompt": ["prompt", "prompt git on", "prompt git off"],
 }
 
 

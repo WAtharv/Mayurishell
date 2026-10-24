@@ -127,6 +127,20 @@ COMMAND_ARGUMENTS: dict[str, dict[str, Any]] = {
             ],
         },
     },
+    "project": {
+        "subcommands": ["info", "tree", "doctor", "env"],
+        "options": ["--depth", "--all"],
+    },
+    "git": {
+        "subcommands": ["status", "log", "diff", "branches", "summary"],
+        "options": ["-n", "--staged"],
+    },
+    "prompt": {
+        "subcommands": ["git"],
+        "values": {
+            "git": ["on", "off"],
+        },
+    },
 }
 
 

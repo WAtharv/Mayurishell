@@ -51,6 +51,7 @@ SAFE_PREFERENCES_KEYS = {
     "reactive_mascot",
     "force_plain",
     "max_suggestions",
+    "prompt_git",
 }
 
 
