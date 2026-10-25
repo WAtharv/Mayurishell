@@ -19,8 +19,16 @@ from core.executor import CommandResult
 from core.logging_config import get_logger
 from core.registry import ArgumentRules, CommandInfo, CommandRegistry
 from services.file_service import EXECUTABLE_EXTENSIONS, format_bytes
+from services.undo_service import (
+    finish_journal_operation,
+    find_latest_undoable_operation,
+    mark_item_done,
+    record_pending_item,
+    start_journal_operation,
+)
 
 logger = get_logger()
+
 
 UNFINISHED_DOWNLOAD_EXTS = {".crdownload", ".part", ".tmp", ".download"}
 MAX_PLAN_DISPLAY_ROWS = 50
@@ -370,6 +378,10 @@ def handle_organize(context: Any, args: list[str]) -> CommandResult:
         return CommandResult.cancel()
 
     # Execute Moves
+    base_dir = context.config.base_dir
+    op_id = start_journal_operation(base_dir, "organize")
+    created_category_folders: set[Path] = set()
+
     existing_runs = load_undo_log(context)
     current_run: dict[str, Any] = {
         "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -397,13 +409,23 @@ def handle_organize(context: Any, args: list[str]) -> CommandResult:
                 file_size = st.st_size
                 file_mtime = st.st_mtime
 
+                # Track created category folder
+                if not dst.parent.exists():
+                    created_category_folders.add(dst.parent)
+
+                # Record pending item BEFORE move
+                record_pending_item(base_dir, op_id, src, dst, kind="file")
+
                 # Create category folder only when needed
                 dst.parent.mkdir(parents=True, exist_ok=True)
 
                 # Move file
                 shutil.move(str(src), str(dst))
 
-                # Append move record and immediately flush to disk
+                # Mark item done in journal
+                mark_item_done(base_dir, op_id, dst)
+
+                # Append move record and immediately flush to disk (legacy log)
                 current_run["moves"].append({
                     "original": str(src),
                     "current": str(dst),
@@ -420,6 +442,16 @@ def handle_organize(context: Any, args: list[str]) -> CommandResult:
     except KeyboardInterrupt:
         interrupted = True
         logger.info("Organize operation interrupted by user")
+
+    # Finalize journal operation
+    final_op_status = "partial" if (interrupted and moved_count > 0) else ("done" if moved_count > 0 else "failed")
+    finish_journal_operation(
+        base_dir,
+        op_id,
+        status=final_op_status,
+        created_folders=list(created_category_folders),
+    )
+
 
     # Final reporting
     if interrupted:
@@ -457,11 +489,18 @@ def handle_organize_undo(context: Any, args: list[str]) -> CommandResult:
     """Reverse the most recent organize run safely."""
     console = context.console
     theme = context.theme
+    base_dir = context.config.base_dir
+
+    latest_op = find_latest_undoable_operation(base_dir, op_type="organize")
+    if latest_op:
+        from commands.undo import _preview_and_execute_undo
+        return _preview_and_execute_undo(context, latest_op, confirm_func=confirm_prompt)
 
     runs = load_undo_log(context)
     if not runs:
         console.print(theme.format_muted("No previous organize run found to undo."))
         return CommandResult.success()
+
 
     # Find the latest run with moves
     target_run_idx = -1

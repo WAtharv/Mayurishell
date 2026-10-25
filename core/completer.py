@@ -126,7 +126,12 @@ class MayuriCompleter(Completer):
             yield from self._complete_git(tokens, current_token)
         elif cmd == "prompt":
             yield from self._complete_prompt(tokens, current_token)
+        elif cmd == "undo":
+            yield from self._complete_undo(tokens, current_token)
+        elif cmd in ("profile", "profiles"):
+            yield from self._complete_profile(tokens, current_token)
         elif cmd == "suggestions":
+
             for opt in ("on", "off"):
                 if opt.startswith(current_token.lower()):
                     yield Completion(opt, start_position=-len(current_token), display=opt, display_meta=f"Turn suggestions {opt}")
@@ -535,7 +540,74 @@ class MayuriCompleter(Completer):
                 if opt.startswith(prefix):
                     yield Completion(opt, start_position=-len(current_token), display=opt, display_meta=f"Turn prompt git branch {opt}")
 
+    def _complete_undo(self, tokens: list[str], current_token: str) -> Iterable[Completion]:
+        """Suggest undo subcommands, flags, and operation IDs (never file paths)."""
+        prefix = current_token.lower()
+        if len(tokens) == 1:
+            for sub, desc in [
+                ("list", "List tracked operations"),
+                ("last", "Undo most recent operation"),
+            ]:
+                if sub.startswith(prefix):
+                    yield Completion(sub, start_position=-len(current_token), display=sub, display_meta=desc)
+
+            # Suggest operation IDs from journal (capped at 20, newest first)
+            try:
+                from services.undo_service import load_journal
+                ops = load_journal(self.context.config.base_dir)
+                for op in reversed(ops[-20:]):
+                    if op.id.lower().startswith(prefix):
+                        yield Completion(
+                            op.id,
+                            start_position=-len(current_token),
+                            display=op.id,
+                            display_meta=f"{op.type} ({len(op.items)} items)",
+                        )
+            except Exception:
+                pass
+            return
+
+        if len(tokens) >= 2 and tokens[1].lower() == "list":
+            if "--all".startswith(prefix):
+                yield Completion("--all", start_position=-len(current_token), display="--all", display_meta="Show all tracked operations")
+
+    def _complete_profile(self, tokens: list[str], current_token: str) -> Iterable[Completion]:
+        """Suggest profile subcommands, profile names, and options."""
+        prefix = current_token.lower()
+        wfs = self.context.config.get_workflows() if hasattr(self.context, "config") else {}
+
+        if len(tokens) == 1:
+            for sub, desc in [
+                ("list", "List all workflow profiles"),
+                ("show", "Show steps for a profile"),
+                ("new", "Create a new workflow profile"),
+                ("edit", "Edit an existing workflow profile"),
+                ("remove", "Remove a workflow profile"),
+            ]:
+                if sub.startswith(prefix):
+                    yield Completion(sub, start_position=-len(current_token), display=sub, display_meta=desc)
+
+            # Direct profile execution: profile <name>
+            for wf_name in sorted(wfs.keys()):
+                if wf_name.lower().startswith(prefix):
+                    desc = wfs[wf_name].get("description", "Profile") if isinstance(wfs[wf_name], dict) else "Profile"
+                    yield Completion(wf_name, start_position=-len(current_token), display=wf_name, display_meta=desc[:30])
+            return
+
+        subcmd = tokens[1].lower()
+        if subcmd in ("show", "edit", "remove") and len(tokens) == 2:
+            for wf_name in sorted(wfs.keys()):
+                if wf_name.lower().startswith(prefix):
+                    desc = wfs[wf_name].get("description", "Profile") if isinstance(wfs[wf_name], dict) else "Profile"
+                    yield Completion(wf_name, start_position=-len(current_token), display=wf_name, display_meta=desc[:30])
+            return
+
+        if subcmd in wfs and len(tokens) >= 2:
+            if "--dry-run".startswith(prefix):
+                yield Completion("--dry-run", start_position=-len(current_token), display="--dry-run", display_meta="Preview profile steps")
+
     def _complete_paths(
+
         self, current_token: str, only_dirs: bool = False, include_shortcuts: bool = False
     ) -> Iterable[Completion]:
         """Suggest matching file and/or directory paths."""

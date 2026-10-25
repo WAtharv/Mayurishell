@@ -9,6 +9,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## [Unreleased]
 
 ### Added
+- **Advanced Undo (`undo`, `undo list [--all]`, `undo last`, `undo <operation-id>`):**
+  - Unified, persistent, crash-safe, multi-process undo journal (`undo_journal.json`, schema version 1) tracking file operations across `move`, `rename`, and `organize`.
+  - Crash-safe operation flow: records each item as `pending` (flushed, atomic) before the move/rename occurs, and marks it `done` upon success. On recovery, pending items are treated as done only if the destination exists and source does not; otherwise dropped.
+  - Multi-process concurrency: exclusive file lock (`.undo_journal.lock`) with 2-second timeout and 30-second stale lock recovery. Always re-reads the journal before writing so parallel shells never overwrite each other's operations.
+  - Zero destructive primitives: strictly forbids `os.unlink`, `os.remove`, `shutil.rmtree`, and `send2trash` during undo restoration. Undo relies strictly on atomic, collision-free moves/renames.
+  - Case-only renames: safely undone via two-step temporary-free renames (`os.path.samefile` / casefold check) on case-insensitive filesystems without overwriting.
+  - Cross-volume protection: journal tracks cross-drive moves, but undo strictly refuses them with safe guidance ("this move crossed drives and cannot be undone safely; move it back yourself").
+  - Content and directory verification: verifies file size exactly and modification timestamp with a 2-second tolerance. Verifies folder item count and timestamp with 2-second tolerance. Re-checks all verification conditions immediately before moving each item back.
+  - Reparse point safety: strictly rejects junctions and symlinks before restoring items.
+  - Automatic pruning & safety caps: operations capped at 100 entries or 1 MB file size, pruning oldest undone/failed runs first while preserving in-progress or recent runs. Corrupt journal files automatically quarantined to `backups/` with a clean schema initialized.
+  - Clean separation & privacy: `undo` by itself never undoes anything (displays usage and recent history). Full file paths in the journal are excluded from `config export`, `doctor`, diagnostics, logs, and completion suggestions.
+- **Workflow Profiles (`profile <name>`, `profile list`, `profile show <name>`, `profile new <name>`, `profile edit <name>`, `profile remove <name>`, alias `profiles`):**
+  - Friendly workflow profile management backed by shell workflow configurations (`config["workflows"]`).
+  - One-time seeding of curated default profiles: `coding` (VS Code + GitHub), `study` (Notion/Obsidian + docs), and `gaming` (Steam/Discord) upon first run or config upgrade without overwriting existing user workflows.
+  - Execution preview and step confirmation: displays formatted execution plan (profile name, description, steps, resolved targets) and requests confirmation before launching.
+  - Dry-run mode (`--dry-run`): previews resolution and commands without launching or altering the system.
+  - Resilient execution: non-zero steps halt execution by default; optional steps (prefixed with `?`) report warnings and continue execution.
+  - Interactive profile editor (`profile edit <name>`, `profile new <name>`): sub-commands for `add <step>`, `remove <idx>`, `move <from> <to>`, `optional <idx>`, `desc <text>`, `show`, `save`, and `cancel`. Rejects nested `workflow`, `profile`, `profiles`, and `undo` commands. Refuses control characters and newlines.
+  - Privacy safeguards: editor sub-command inputs and step arguments are never saved to history or written to logs.
 - **Project-Aware Commands (`project info`, `project tree`, `project doctor`, `project env`):**
   - Non-destructive project root detection starting at current directory (never `os.getcwd`) and walking up at most 8 levels, stopping at drive root (`.git`, `pyproject.toml`, `requirements.txt`, `setup.py`, `setup.cfg`, `package.json`, `Pipfile`, `environment.yml`, `Dockerfile`, `manage.py`).
   - Project stack detection for `python`, `ml` (numpy, pandas, torch, tensorflow, scikit-learn), `flask`, `fastapi`, `node`, `docker` via file names and capped 256 KB read of manifests with `tomllib`. Never executes, imports, or installs from projects.

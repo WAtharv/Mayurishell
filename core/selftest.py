@@ -59,11 +59,12 @@ def run_selftest() -> int:
         "core.version",
         "commands.appearance", "commands.applications", "commands.builtins",
         "commands.customization", "commands.doctor", "commands.files", "commands.git", "commands.navigation",
-        "commands.organization", "commands.processes", "commands.project", "commands.project_scaffolding",
-        "commands.search", "commands.system", "commands.websites", "commands.workflows",
+        "commands.organization", "commands.processes", "commands.profile", "commands.project", "commands.project_scaffolding",
+        "commands.search", "commands.system", "commands.undo", "commands.websites", "commands.workflows",
         "services.application_discovery", "services.config_service", "services.doctor_service", "services.file_service",
-        "services.git_service", "services.launcher_service", "services.project_service", "services.system_service", "services.workflow_service",
+        "services.git_service", "services.launcher_service", "services.project_service", "services.system_service", "services.undo_service", "services.workflow_service",
     ]
+
 
     imported_count = 0
     import_errors: list[str] = []
@@ -118,6 +119,9 @@ def run_selftest() -> int:
             from commands.system import register_system_commands
             from commands.websites import register_website_commands
             from commands.workflows import register_workflow_commands
+            from commands.undo import register_undo_commands
+            from commands.profile import register_profile_commands
+            from commands.doctor import register_doctor_commands
 
             register_builtin_commands(registry)
             register_appearance_commands(registry)
@@ -134,8 +138,10 @@ def run_selftest() -> int:
             register_project_aware_commands(registry)
             register_git_commands(registry)
             register_workflow_commands(registry, config_mgr)
-            from commands.doctor import register_doctor_commands
+            register_undo_commands(registry)
+            register_profile_commands(registry)
             register_doctor_commands(registry)
+
 
             cmd_names = registry.list_commands()
             report_check("Command registry population", len(cmd_names) > 0, f"{len(cmd_names)} commands registered")
@@ -181,7 +187,12 @@ def run_selftest() -> int:
                 "diagnostics",
                 "doctor",
                 "project info",
+                "undo",
+                "undo list",
+                "profile",
+                "profile list",
             ]
+
 
             for cmd in test_commands:
                 try:

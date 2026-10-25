@@ -84,7 +84,9 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "suggestions": "on",
         "max_suggestions": 3,
         "prompt_git": "on",
+        "profiles_seeded": False,
     },
+
 }
 
 
@@ -99,6 +101,22 @@ NEW_WEBSITE_TEMPLATES: dict[str, str] = {
     "google": "https://www.google.com/search?q={query}",
     "github": "https://github.com/search?q={query}",
 }
+
+SEEDED_PROFILES: dict[str, dict[str, Any]] = {
+    "coding": {
+        "description": "Coding session with projects folder and editor",
+        "steps": ["projects", "github"],
+    },
+    "study": {
+        "description": "Study session with documents and research",
+        "steps": ["documents", "google"],
+    },
+    "gaming": {
+        "description": "Gaming and voice chat launch",
+        "steps": ["discord", "spotify"],
+    },
+}
+
 
 
 def deep_merge_defaults(target: dict[str, Any], defaults: dict[str, Any]) -> dict[str, Any]:
@@ -190,15 +208,29 @@ class ConfigManager:
                 upgraded = True
                 logger.info("Added missing default workflow 'dev'.")
 
+        preferences = loaded.setdefault("preferences", {})
+        if not preferences.get("profiles_seeded", False):
+            wf = loaded.setdefault("workflows", {})
+            for name, prof_data in SEEDED_PROFILES.items():
+                if name not in wf:
+                    wf[name] = copy.deepcopy(prof_data)
+                    upgraded = True
+                    logger.info("Seeded default workflow profile '%s'.", name)
+            preferences["profiles_seeded"] = True
+            upgraded = True
+
         return upgraded
+
 
     def load(self) -> dict[str, Any]:
         """Load configuration from disk. Recovers with defaults if missing or corrupted."""
         if not self.config_path.exists():
             logger.info("Config file not found. Creating default configuration at %s", self.config_path)
             self.data = copy.deepcopy(DEFAULT_CONFIG)
+            self._upgrade_config(self.data)
             self.save()
             return self.data
+
 
         try:
             with open(self.config_path, "r", encoding="utf-8") as f:

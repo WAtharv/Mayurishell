@@ -23,6 +23,13 @@ from services.file_service import (
     recycle_path,
     rename_path,
 )
+from services.undo_service import (
+    finish_journal_operation,
+    mark_item_done,
+    record_pending_item,
+    start_journal_operation,
+)
+
 
 
 def confirm_prompt(console: Any, prompt_msg: str, default_yes: bool = False, theme: Any = None) -> bool:
@@ -200,14 +207,27 @@ def handle_move(context: Any, args: list[str]) -> CommandResult:
                 return CommandResult.cancel()
         overwrite = True
 
+    base_dir = context.config.base_dir
+    op_id = start_journal_operation(base_dir, "move")
+    record_pending_item(
+        base_dir,
+        op_id,
+        src,
+        check_target,
+        kind="folder" if src.is_dir() else "file",
+    )
+
     try:
         result = move_path(src, dst, overwrite=overwrite)
+        mark_item_done(base_dir, op_id, result)
+        finish_journal_operation(base_dir, op_id, status="done")
         console.print(
             f"{theme.format_success('Moved')} {theme.format_primary(escape(src.name), bold=True)} -> "
             f"{theme.format_primary(escape(str(result)), bold=True)}"
         )
         return CommandResult.success()
     except Exception as exc:
+        finish_journal_operation(base_dir, op_id, status="failed")
         console.print(f"{theme.format_error('Move failed:')} {escape(str(exc))}")
         return CommandResult.fail()
 
@@ -253,14 +273,27 @@ def handle_rename(context: Any, args: list[str]) -> CommandResult:
                 return CommandResult.cancel()
         overwrite = True
 
+    base_dir = context.config.base_dir
+    op_id = start_journal_operation(base_dir, "rename")
+    record_pending_item(
+        base_dir,
+        op_id,
+        src,
+        target_dst,
+        kind="folder" if src.is_dir() else "file",
+    )
+
     try:
         result = rename_path(src, new_name, overwrite=overwrite)
+        mark_item_done(base_dir, op_id, result)
+        finish_journal_operation(base_dir, op_id, status="done")
         console.print(
             f"{theme.format_success('Renamed')} {theme.format_primary(escape(src.name), bold=True)} -> "
             f"{theme.format_primary(escape(result.name), bold=True)}"
         )
         return CommandResult.success()
     except Exception as exc:
+        finish_journal_operation(base_dir, op_id, status="failed")
         console.print(f"{theme.format_error('Rename failed:')} {escape(str(exc))}")
         return CommandResult.fail()
 
@@ -330,9 +363,12 @@ def handle_delete(context: Any, args: list[str]) -> CommandResult:
     # Confirmation prompt (default is No)
     if not auto_yes:
         if target_path.is_dir():
-            msg = theme.format_error(f"Are you sure you want to recursively delete directory '{escape(target_path.name)}' and all its contents?", bold=True)
+            msg = theme.format_error(
+                f"Are you sure you want to recursively delete directory '{escape(target_path.name)}' and all its contents? (Restore deleted files from the Recycle Bin.)",
+                bold=True,
+            )
         else:
-            msg = f"Are you sure you want to delete '{escape(target_path.name)}'?"
+            msg = f"Are you sure you want to delete '{escape(target_path.name)}'? (Restore deleted files from the Recycle Bin.)"
 
         confirmed = confirm_prompt(console, msg, default_yes=False, theme=theme)
         if not confirmed:
@@ -341,7 +377,10 @@ def handle_delete(context: Any, args: list[str]) -> CommandResult:
 
     try:
         recycle_path(target_path, recursive=recursive)
-        console.print(f"{theme.format_success('Sent to Recycle Bin:')} {theme.format_primary(escape(target_path.name), bold=True)}")
+        console.print(
+            f"{theme.format_success('Sent to Recycle Bin:')} {theme.format_primary(escape(target_path.name), bold=True)}\n"
+            f"{theme.format_muted('Restore deleted files from the Recycle Bin.')}"
+        )
         return CommandResult.success()
     except Exception as exc:
         console.print(f"{theme.format_error('Delete failed:')} {escape(str(exc))}")

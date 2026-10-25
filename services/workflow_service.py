@@ -48,7 +48,11 @@ FORBIDDEN_COMMANDS = {
     "diagnostics",
     "git",
     "project",
+    "undo",
+    "profile",
+    "profiles",
 }
+
 
 MAX_WORKFLOW_STEPS = 20
 

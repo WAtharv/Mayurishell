@@ -579,8 +579,41 @@ def check_config_health(context: Any) -> list[DoctorFinding]:
                 fix="Clear corrupted history with: history clear",
             ))
 
+    # 2b. Undo journal existence and validity check (never prints file paths or names)
+    journal_file = config.base_dir / "undo_journal.json"
+    if journal_file.exists():
+        try:
+            with open(journal_file, "r", encoding="utf-8") as f:
+                j_data = json.load(f)
+            if isinstance(j_data, dict) and "operations" in j_data:
+                op_count = len(j_data.get("operations", []))
+                f_size = journal_file.stat().st_size
+                findings.append(DoctorFinding(
+                    category="config",
+                    name="Undo Journal",
+                    status="OK",
+                    message=f"undo_journal.json exists, parses cleanly ({op_count} tracked operations, {f_size} bytes).",
+                ))
+            else:
+                findings.append(DoctorFinding(
+                    category="config",
+                    name="Undo Journal",
+                    status="WARN",
+                    message="undo_journal.json root element is invalid.",
+                    fix="Corrupted journal will automatically backup on next undo command.",
+                ))
+        except Exception as exc:
+            findings.append(DoctorFinding(
+                category="config",
+                name="Undo Journal",
+                status="WARN",
+                message=f"undo_journal.json is unparseable: {exc}",
+                fix="Corrupted journal will automatically backup on next undo command.",
+            ))
+
     # 3. User Data, Logs, and Backups Folder Writable Probes
     dirs_to_probe = [
+
         ("Base Data Directory", config.base_dir),
         ("Logs Directory", config.logs_dir),
         ("Backups Directory", config.backups_dir),

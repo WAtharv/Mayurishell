@@ -561,6 +561,23 @@ mayuri@pc > touch notes.txt
 mayuri@pc > touch newfile.py
 ```
 
+### `undo`
+
+**Description:** Inspect and reverse file move, rename, or organize operations.
+
+**Usage:** `undo [list [--all] | last | <operation-id>]`
+
+**Arguments:** Minimum: `0`, Maximum: `2`
+
+**Examples:**
+```text
+mayuri@pc > undo
+mayuri@pc > undo list
+mayuri@pc > undo list --all
+mayuri@pc > undo last
+mayuri@pc > undo a1b2c3
+```
+
 ---
 
 ## Folders
@@ -1017,6 +1034,39 @@ mayuri@pc > youtube
 ---
 
 ## Workflows
+
+### `profile`
+
+**Description:** Manage and run multi-step workflow profiles.
+
+**Usage:** `profile [<name> [--dry-run] | list | show <name> | new <name> | edit <name> | remove <name>]`
+
+**Arguments:** Minimum: `0`, Maximum: `Unlimited`
+
+**Examples:**
+```text
+mayuri@pc > profile
+mayuri@pc > profile list
+mayuri@pc > profile show coding
+mayuri@pc > profile coding
+mayuri@pc > profile coding --dry-run
+mayuri@pc > profile new myflow
+mayuri@pc > profile edit myflow
+mayuri@pc > profile remove myflow
+```
+
+### `profiles`
+
+**Description:** List all configured workflow profiles.
+
+**Usage:** `profiles`
+
+**Arguments:** Minimum: `0`, Maximum: `Unlimited`
+
+**Examples:**
+```text
+mayuri@pc > profiles
+```
 
 ### `workflow`
 

@@ -21,7 +21,10 @@ from commands.search import register_search_commands
 from commands.system import register_system_commands
 from commands.websites import register_website_commands
 from commands.workflows import register_workflow_commands
+from commands.undo import register_undo_commands
+from commands.profile import register_profile_commands
 from core.aliases import AliasManager
+
 from core.config_manager import ConfigManager
 from core.history import HistoryManager
 from core.logging_config import get_logger, setup_logging
@@ -63,7 +66,10 @@ def register_all_commands(registry: CommandRegistry, config_mgr: ConfigManager) 
     register_project_aware_commands(registry)
     register_git_commands(registry)
     register_workflow_commands(registry, config_mgr)
+    register_undo_commands(registry)
+    register_profile_commands(registry)
     register_doctor_commands(registry)
+
 
 
 def wait_for_enter_if_terminal() -> None:

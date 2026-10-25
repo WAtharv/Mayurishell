@@ -74,7 +74,10 @@ COMMAND_EXAMPLES: dict[str, list[str]] = {
     "project": ["project info", "project tree", "project tree --depth 2", "project doctor", "project env"],
     "git": ["git status", "git log -n 5", "git diff", "git diff --staged", "git branches", "git summary"],
     "prompt": ["prompt", "prompt git on", "prompt git off"],
+    "undo": ["undo", "undo list", "undo list --all", "undo last", "undo a1b2c3"],
+    "profile": ["profile", "profile list", "profile show coding", "profile coding", "profile coding --dry-run", "profile new myflow", "profile edit myflow", "profile remove myflow"],
 }
+
 
 
 def generate_commands_markdown() -> str:

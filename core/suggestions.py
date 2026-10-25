@@ -26,7 +26,9 @@ DESTRUCTIVE_COMMANDS = {
     "workflow",
     "alias",
     "config",
+    "undo",
 }
+
 
 # Commands on the harmless allowlist that are safe to prefill on single confident match
 PREFILL_ALLOWLIST = {
@@ -141,7 +143,16 @@ COMMAND_ARGUMENTS: dict[str, dict[str, Any]] = {
             "git": ["on", "off"],
         },
     },
+    "undo": {
+        "subcommands": ["list", "last"],
+        "options": ["--all"],
+    },
+    "profile": {
+        "subcommands": ["list", "show", "new", "edit", "remove"],
+        "options": ["--dry-run", "-n"],
+    },
 }
+
 
 
 def cached_which(cmd_name: str) -> str | None:
